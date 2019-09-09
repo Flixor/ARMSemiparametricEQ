@@ -1,0 +1,42 @@
+/*
+ * AK4588EN.h
+ *
+ * Created: 03-May-18 22:32:57
+ *  Author: Willem van der Kooij
+ */ 
+
+
+#ifndef AK4588EN_H_
+#define AK4588EN_H_
+
+uint8_t AK4588EN_Init(void);
+uint8_t AK4588EN_TWI_ReadReg(uint8_t regAddr);
+
+
+#define AK4588EN_CAD0		1	//either 0 or 1
+#define AK4588EN_CAD1		1	//either 0 or 1
+#define AK4588EN_I2C_ADDR	0x10 | (AK4588EN_CAD1 << 1) | (AK4588EN_CAD0)
+
+#define AK4588EN_PWRMNGMNT					0x00
+#define AK4588EN_PLL_CTRL					0x01
+#define AK4588EN_DAC_TDM					0x02
+#define AK4588EN_CTRL1						0x03
+#define AK4588EN_CTRL2						0x04	
+#define AK4588EN_MODE_CTRL					0x05
+#define AK4588EN_FILTER_SET					0x06
+#define AK4588EN_HPF_EN_FILTER_SET			0x07
+#define AK4588EN_LOUT_VOLUME				0x08
+#define AK4588EN_ROUT_VOLUME				0x09
+
+#define AK4588EN_PWRMNGMNT_DEFAULT			0x1F
+#define AK4588EN_PLL_CTRL_DEFAULT			0x05
+#define AK4588EN_DAC_TDM_DEFAULT			0x00
+#define AK4588EN_CTRL1_DEFAULT				0x38
+#define AK4588EN_CTRL2_DEFAULT				0x01
+#define AK4588EN_MODE_CTRL_DEFAULT			0x2A
+#define AK4588EN_FILTER_SET_DEFAULT			0x31
+#define AK4588EN_HPF_EN_FILTER_SET_DEFAULT	0x0B
+#define AK4588EN_LOUT_VOLUME_DEFAULT		0xFF
+#define AK4588EN_ROUT_VOLUME_DEFAULT		0xFF
+
+#endif /* AK4588EN_H_ */
