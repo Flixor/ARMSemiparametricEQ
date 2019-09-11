@@ -46,6 +46,13 @@ void Init_UART(void)
 	
 	FLEXCOM1 -> FLEXCOM_MR = FLEXCOM_MR_OPMODE_USART;
 	
+	// enable interrupt AT NVIC
+	NVIC_SetPriority(FLEXCOM1_IRQn, 1); // interrupt level below i2sc
+	NVIC_EnableIRQ(FLEXCOM1_IRQn);
+	
+	// enable RXRDY interrupt
+	USART1 -> US_IER = US_IER_RXRDY;
+	
 	//write protection
 	USART1 -> US_WPMR &= ~(US_WPMR_WPEN);
 	USART1 -> US_WPMR = US_WPMR_WPKEY_PASSWD;
@@ -75,7 +82,7 @@ void Init_UART(void)
 	setbuf(stdin, NULL);	//dont buffer stdin
 						
 						
-	printf("UART Initialized\r\n");	
+	printf("UART Initialized with printf\r\n");	
 }
 
 static void USART_PioSetup(void)
@@ -193,6 +200,12 @@ char* convert(unsigned int num, int base)
 char UART_Getchar(void)
 {
 	//while (!(((USART1 -> US_CSR) & US_CSR_RXRDY_Msk) == US_CSR_RXRDY_Msk));
+	if (!(((USART1 -> US_CSR) & US_CSR_RXRDY_Msk) == US_CSR_RXRDY_Msk)) {
+		return ' ';
+	}
+	
+	USART1 -> US_CR |= US_CR_RSTSTA_Msk; // clears overrun error OVRE bit in receiver, which then clears RXRDY
+	
 	return USART1 -> US_RHR;
 }
 

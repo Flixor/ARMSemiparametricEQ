@@ -136,8 +136,7 @@ main.d main.o: .././main.c \
  C:\Program\ Files\ (x86)\Atmel\Studio\7.0\Packs\arm\cmsis\5.0.1\CMSIS\Include/core_cm4.h \
  C:\Program\ Files\ (x86)\Atmel\Studio\7.0\Packs\arm\cmsis\5.0.1\CMSIS\Include/arm_const_structs.h \
  C:\Program\ Files\ (x86)\Atmel\Studio\7.0\Packs\arm\cmsis\5.0.1\CMSIS\Include/arm_math.h \
- C:\Program\ Files\ (x86)\Atmel\Studio\7.0\Packs\arm\cmsis\5.0.1\CMSIS\Include/arm_common_tables.h \
- .././IRdata.h
+ C:\Program\ Files\ (x86)\Atmel\Studio\7.0\Packs\arm\cmsis\5.0.1\CMSIS\Include/arm_common_tables.h
 
 C:\Program\ Files\ (x86)\Atmel\Studio\7.0\Packs\atmel\SAMG_DFP\2.1.97\samg55\include/sam.h:
 
@@ -426,5 +425,3 @@ C:\Program\ Files\ (x86)\Atmel\Studio\7.0\Packs\arm\cmsis\5.0.1\CMSIS\Include/ar
 C:\Program\ Files\ (x86)\Atmel\Studio\7.0\Packs\arm\cmsis\5.0.1\CMSIS\Include/arm_math.h:
 
 C:\Program\ Files\ (x86)\Atmel\Studio\7.0\Packs\arm\cmsis\5.0.1\CMSIS\Include/arm_common_tables.h:
-
-.././IRdata.h:
