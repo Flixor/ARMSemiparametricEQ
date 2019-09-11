@@ -30,7 +30,7 @@
 #include "AK4588EN.h"
 #include "FPU.h"
 #include "arm_math.h"
-#include "arm_const_structs.h"
+//#include "arm_const_structs.h"
 
 
 
@@ -47,14 +47,14 @@ static volatile uint8_t PingPong = PING;
 uint8_t channelCount = CHANNEL_L;
 
 
-/* FFT still necessary ? */
+/* FFT still necessary ?
 
 #define FFT_FORWARD 0
 #define FFT_INVERSE 1
 #define FFT_BITREVERSE 1
 
 const arm_cfft_instance_f32* S = &arm_cfft_sR_f32_len512;
-
+ */
 
 
 /* I2S */
@@ -70,21 +70,22 @@ int32_t TransmitBufL2[I2SC_BUFFSZ];
 int32_t TransmitBufR1[I2SC_BUFFSZ];
 int32_t TransmitBufR2[I2SC_BUFFSZ];
 
-float32_t transferBufInputL[I2SC_BUFFSZ];
-float32_t transferBufInputR[I2SC_BUFFSZ];
-float32_t transferBufOutputL[I2SC_BUFFSZ];
-float32_t transferBufOutputR[I2SC_BUFFSZ];
+float transferBufInputL[I2SC_BUFFSZ];
+float transferBufInputR[I2SC_BUFFSZ];
+float transferBufOutputL[I2SC_BUFFSZ];
+float transferBufOutputR[I2SC_BUFFSZ];
 
 
 /* SVF */
 #define FS 48000.0
-#define SVF_Q 0.5 // Q = 2; q = 1/Q
+#define SVF_Q 0.5 //  eigenlijk Q = 2; q = 1/Q
 #define FC_INIT 1000.0
 #define FC_LIM_UPPER 4000.0
 #define FC_LIM_LOWER 250.0
-static volatile double Fc = FC_INIT;
-static volatile double saved_Fc;
-//#define SVF_F 2.0 * sin(PI * fc / Fs)
+// rxrdy interrupt
+static volatile float Fc = FC_INIT;
+static volatile float saved_Fc;
+static volatile float amplfactor = 1.0f;
 
 
 
@@ -101,19 +102,19 @@ static uint8_t Init_Clock(void);
 
 
 
-double svf_bandpass(double input) {
-	static double hp, bp, lp, prev_bp, prev_lp;
-		
-	double f = 2.0 * sin(PI * Fc / FS);
+float svf_bandpass(float input) {
+	static float hp, bp, lp, prev_bp, prev_lp;
+	
+	float f = 2.0f * sin(PI * Fc / FS);
 	
 	prev_bp = bp;
 	prev_lp = lp;
 	
+	lp = prev_bp*f + prev_lp;	
 	hp = input - prev_bp*SVF_Q - lp;
 	bp = hp*f + prev_bp;
-	lp = prev_bp*f + prev_lp;
 	
-	return bp;
+	return bp * amplfactor;
 }
 
 
@@ -125,24 +126,28 @@ int main(void)
 	/* Setup Board and peripherals */
 	Init_Board();
 
-				
+	// print initial fc value
+	printf("Fc: \t%g\r\n", Fc);
+			
+			
 	while (1) {
 	
 		if (newdata) {
+
 			if (PingPong == PING) {
 				
 				for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
-					//if (FILTER_ON)	{ TransmitBufR2[i] = svf_bandpass(ReceiveBufR2[i]); }
-					//else			{ TransmitBufR2[i] = ReceiveBufR2[i]; }
-						TransmitBufR2[i] = svf_bandpass(ReceiveBufR2[i]);
+					if (FILTER_ON)	{ TransmitBufR2[i] = svf_bandpass(ReceiveBufR2[i]); }
+									  //transferBufOutputR[i] *= factor;
+									  //TransmitBufR2[i] = transferBufOutputR[i]; }
+					else			{ TransmitBufR2[i] = ReceiveBufR2[i]; }
 				}			
 				
 			} else { // == PONG
 				
 				for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
-					//if (FILTER_ON)	{ TransmitBufR1[i] = svf_bandpass(ReceiveBufR1[i]); }
-					//else			{TransmitBufR1[i] = ReceiveBufR1[i]; }
-						TransmitBufR1[i] = svf_bandpass(ReceiveBufR1[i]); 
+					if (FILTER_ON)	{ TransmitBufR1[i] = svf_bandpass(ReceiveBufR1[i]); }
+					else			{ TransmitBufR1[i] = ReceiveBufR1[i]; }
 				}
 				
 			}
@@ -287,18 +292,20 @@ void I2SC0_Handler(void) {
 
 // USART1 RXRDY interrupt
 void FLEXCOM1_Handler(void){
-	// UART_Getchar() obsolete!
 	
 	char c = USART1 -> US_RHR;
 	
-	if (c == 'q' && Fc < FC_LIM_UPPER){
+	if ((c == 'q' || c == 'Q') && Fc < FC_LIM_UPPER){
 		Fc += FC_LIM_LOWER;
-		} else if (c == 'a' && Fc > FC_LIM_LOWER){
+		} else if ((c == 'a' || c == 'A') && Fc > FC_LIM_LOWER){
 		Fc -= FC_LIM_LOWER;
 	}
 	
+	//amplfactor = 1.0f / (float) pow(2.0, (Fc/(FC_LIM_UPPER)));
+	amplfactor = 1.0f;
+	
 	if (Fc != saved_Fc) {
-		printf("Fc: \t%g\r\n", Fc);
+		printf("Fc: \t%g\t amplfactor: \t%g\r\n", Fc, amplfactor);
 		saved_Fc = Fc;
 	}
 	
