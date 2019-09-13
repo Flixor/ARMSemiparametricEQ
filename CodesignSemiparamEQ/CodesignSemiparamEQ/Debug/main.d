@@ -133,10 +133,7 @@ main.d main.o: .././main.c \
  .././PMC.h .././PIO.h .././I2SC.h .././UART.h .././TWI.h .././Matrix.h \
  .././AK4588EN.h .././FPU.h \
  C:\Program\ Files\ (x86)\Atmel\Studio\7.0\Packs\arm\cmsis\5.0.1\CMSIS\Include/arm_math.h \
- C:\Program\ Files\ (x86)\Atmel\Studio\7.0\Packs\arm\cmsis\5.0.1\CMSIS\Include/core_cm4.h \
- C:\Program\ Files\ (x86)\Atmel\Studio\7.0\Packs\arm\cmsis\5.0.1\CMSIS\Include/arm_const_structs.h \
- C:\Program\ Files\ (x86)\Atmel\Studio\7.0\Packs\arm\cmsis\5.0.1\CMSIS\Include/arm_math.h \
- C:\Program\ Files\ (x86)\Atmel\Studio\7.0\Packs\arm\cmsis\5.0.1\CMSIS\Include/arm_common_tables.h
+ C:\Program\ Files\ (x86)\Atmel\Studio\7.0\Packs\arm\cmsis\5.0.1\CMSIS\Include/core_cm4.h
 
 C:\Program\ Files\ (x86)\Atmel\Studio\7.0\Packs\atmel\SAMG_DFP\2.1.97\samg55\include/sam.h:
 
@@ -419,9 +416,3 @@ c:\program\ files\ (x86)\atmel\studio\7.0\toolchain\arm\arm-gnu-toolchain\arm-no
 C:\Program\ Files\ (x86)\Atmel\Studio\7.0\Packs\arm\cmsis\5.0.1\CMSIS\Include/arm_math.h:
 
 C:\Program\ Files\ (x86)\Atmel\Studio\7.0\Packs\arm\cmsis\5.0.1\CMSIS\Include/core_cm4.h:
-
-C:\Program\ Files\ (x86)\Atmel\Studio\7.0\Packs\arm\cmsis\5.0.1\CMSIS\Include/arm_const_structs.h:
-
-C:\Program\ Files\ (x86)\Atmel\Studio\7.0\Packs\arm\cmsis\5.0.1\CMSIS\Include/arm_math.h:
-
-C:\Program\ Files\ (x86)\Atmel\Studio\7.0\Packs\arm\cmsis\5.0.1\CMSIS\Include/arm_common_tables.h:

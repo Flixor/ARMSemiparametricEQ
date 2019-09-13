@@ -1,7 +1,7 @@
 /*
- * ArmConvolution1.c
+ * CodesignSemiparamEQ.c
  *
- * Created: 8/21/2019 7:35:54 PM
+ * Created: 9/09/2019 7:35:54 PM
  * Author : Flixor
  */ 
 
@@ -33,7 +33,7 @@
 //#include "arm_const_structs.h"
 
 
-
+/* I2S */
 #define I2SC_TXRDY_LED
 #define TWI0_TXRDY_LED
 
@@ -46,18 +46,6 @@ static volatile uint8_t PingPong = PING;
 #define CHANNEL_R	1
 uint8_t channelCount = CHANNEL_L;
 
-
-/* FFT still necessary ?
-
-#define FFT_FORWARD 0
-#define FFT_INVERSE 1
-#define FFT_BITREVERSE 1
-
-const arm_cfft_instance_f32* S = &arm_cfft_sR_f32_len512;
- */
-
-
-/* I2S */
 #define I2SC_BUFFSZ 256
 
 int32_t ReceiveBufL1[I2SC_BUFFSZ];
@@ -70,22 +58,31 @@ int32_t TransmitBufL2[I2SC_BUFFSZ];
 int32_t TransmitBufR1[I2SC_BUFFSZ];
 int32_t TransmitBufR2[I2SC_BUFFSZ];
 
-float transferBufInputL[I2SC_BUFFSZ];
-float transferBufInputR[I2SC_BUFFSZ];
-float transferBufOutputL[I2SC_BUFFSZ];
-float transferBufOutputR[I2SC_BUFFSZ];
 
 
 /* SVF */
 #define FS 48000.0
-#define SVF_Q 0.5 //  eigenlijk Q = 2; q = 1/Q
+#define SVF_Q 0.5 // is de reciproce van de eigenlijke Q = 2
 #define FC_INIT 1000.0
 #define FC_LIM_UPPER 4000.0
 #define FC_LIM_LOWER 250.0
-// rxrdy interrupt
+#define FC_INCR 250.0
+
+#define AMPL_DB_INIT 0.0
+#define AMPL_DB_LIM_UPPER 12.0
+#define AMPL_DB_LIM_LOWER -12.0
+#define AMPL_DB_INCR 1.0
+
+// variables set in rxrdy interrupt
 static volatile float Fc = FC_INIT;
-static volatile float saved_Fc;
-static volatile float amplfactor = 1.0f;
+static volatile float saved_Fc = FC_INIT;
+
+static volatile float Ampl_db = AMPL_DB_INIT;
+static volatile float Ampl_lin;
+static volatile float saved_Ampl_db = AMPL_DB_INIT;
+
+static volatile float slider_neg_lin = 0.5;
+static volatile float slider_pos_lin = 0.5;
 
 
 
@@ -101,12 +98,19 @@ static void Init_Board(void);
 static uint8_t Init_Clock(void);
 
 
+float db_to_lin (float db) {
+	return (float) pow(10.0, db/20.0);
+}
+
 
 float svf_bandpass(float input) {
 	static float hp, bp, lp, prev_bp, prev_lp;
-	
 	float f = 2.0f * sin(PI * Fc / FS);
 	
+	// simulate inverting summing amp for neg gain
+	input += bp * slider_neg_lin;
+	input = -input;
+		
 	prev_bp = bp;
 	prev_lp = lp;
 	
@@ -114,7 +118,12 @@ float svf_bandpass(float input) {
 	hp = input - prev_bp*SVF_Q - lp;
 	bp = hp*f + prev_bp;
 	
-	return bp * amplfactor;
+	// simulate inverting summing amp for pos gain
+	input += bp * slider_pos_lin;
+	input = -input;
+	
+	return input;
+	//return input + bp * Ampl_lin;
 }
 
 
@@ -128,7 +137,11 @@ int main(void)
 
 	// print initial fc value
 	printf("Fc: \t%g\r\n", Fc);
-			
+	printf("Ampl dB: \t%g\r\n", Ampl_db);
+	
+	Ampl_lin = db_to_lin(Ampl_db);
+	
+				
 			
 	while (1) {
 	
@@ -138,8 +151,6 @@ int main(void)
 				
 				for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
 					if (FILTER_ON)	{ TransmitBufR2[i] = svf_bandpass(ReceiveBufR2[i]); }
-									  //transferBufOutputR[i] *= factor;
-									  //TransmitBufR2[i] = transferBufOutputR[i]; }
 					else			{ TransmitBufR2[i] = ReceiveBufR2[i]; }
 				}			
 				
@@ -290,23 +301,34 @@ void I2SC0_Handler(void) {
 }
 
 
+
 // USART1 RXRDY interrupt
 void FLEXCOM1_Handler(void){
 	
 	char c = USART1 -> US_RHR;
+	if (c < 91) c += 32; // ghetto method to make lowercase lol
 	
-	if ((c == 'q' || c == 'Q') && Fc < FC_LIM_UPPER){
-		Fc += FC_LIM_LOWER;
-		} else if ((c == 'a' || c == 'A') && Fc > FC_LIM_LOWER){
-		Fc -= FC_LIM_LOWER;
+	switch (c) {
+		case 'q' : if (Fc < FC_LIM_UPPER) Fc += FC_INCR; break;
+		case 'a' : if (Fc > FC_LIM_LOWER) Fc -= FC_INCR; break;
+		case 'w' : if (Ampl_db < AMPL_DB_LIM_UPPER) Ampl_db += AMPL_DB_INCR; break;
+		case 's' : if (Ampl_db > AMPL_DB_LIM_LOWER) Ampl_db -= AMPL_DB_INCR; break;
 	}
 	
-	//amplfactor = 1.0f / (float) pow(2.0, (Fc/(FC_LIM_UPPER)));
-	amplfactor = 1.0f;
-	
 	if (Fc != saved_Fc) {
-		printf("Fc: \t%g\t amplfactor: \t%g\r\n", Fc, amplfactor);
+		printf("Fc: \t%g\r\n", Fc);
 		saved_Fc = Fc;
+	}
+	
+	if (Ampl_db != saved_Ampl_db) {
+		
+		float gain_lin = db_to_lin(Ampl_db);
+		float t1 = db_to_lin(AMPL_DB_LIM_UPPER) + 1.0f;
+		slider_pos_lin = (gain_lin / (1.0f + gain_lin) * t1) - 1.0f;		
+		slider_neg_lin = (1.0f / (1.0f + gain_lin) * t1) - 1.0f;
+		printf("ampl db\t%g\r\ngain\t%g\r\npos\t%g\r\nneg\t%g\r\nsum\t%g\r\n\n", Ampl_db, gain_lin, slider_pos_lin, slider_neg_lin, slider_pos_lin + slider_neg_lin);
+		
+		saved_Ampl_db = Ampl_db;
 	}
 	
 	USART1 -> US_CR |= US_CR_RSTSTA_Msk; // clears overrun error OVRE bit in receiver, which then clears RXRDY
