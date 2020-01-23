@@ -33,6 +33,12 @@
 //#include "arm_const_structs.h"
 
 
+/* Functions Calls */
+static void Init_Board(void);
+static uint8_t Init_Clock(void);
+static float db_to_lin (float db);
+
+
 /* I2S */
 #define I2SC_TXRDY_LED
 #define TWI0_TXRDY_LED
@@ -62,7 +68,7 @@ int32_t TransmitBufR2[I2SC_BUFFSZ];
 
 /* SVF */
 #define FS 48000.0
-#define SVF_Q 0.5 // is de reciproce van de eigenlijke Q = 2
+#define SVF_Q 0.25 // is de reciproce van de eigenlijke Q (dus kleinere SVF_Q == grotere eigenlijke Q == nauwere band)
 #define FC_INIT 1000.0
 #define FC_LIM_UPPER 4000.0
 #define FC_LIM_LOWER 250.0
@@ -73,6 +79,9 @@ int32_t TransmitBufR2[I2SC_BUFFSZ];
 #define AMPL_DB_LIM_LOWER -12.0
 #define AMPL_DB_INCR 1.0
 
+#define BP_TOTALFACTOR		(db_to_lin(AMPL_DB_LIM_UPPER) - 1.0f)
+#define TRANSFER_COMP_SUM	(db_to_lin(AMPL_DB_LIM_UPPER) + 1.0f)
+
 // variables set in rxrdy interrupt
 static volatile float Fc = FC_INIT;
 static volatile float saved_Fc = FC_INIT;
@@ -81,8 +90,11 @@ static volatile float Ampl_db = AMPL_DB_INIT;
 static volatile float Ampl_lin;
 static volatile float saved_Ampl_db = AMPL_DB_INIT;
 
-static volatile float slider_neg_lin = 0.5;
-static volatile float slider_pos_lin = 0.5;
+static volatile float slider_neg_frac = 0.5;
+static volatile float slider_pos_frac = 0.5;
+
+static volatile float current_q = 0.5 * SVF_Q;
+
 
 
 
@@ -93,39 +105,55 @@ char floatPrintStr[40] = "%d:\t g:%g \t f:%f \t li:%li \r\n"; // args: {str, ctr
 
 
 
-/* Functions Calls */
-static void Init_Board(void);
-static uint8_t Init_Clock(void);
 
-
-float db_to_lin (float db) {
-	return (float) pow(10.0, db/20.0);
-}
-
-
-float svf_bandpass(float input) {
+float svf_bandpass_analogequiv(float input) {
 	static float hp, bp, lp, prev_bp, prev_lp;
 	float f = 2.0f * sin(PI * Fc / FS);
-	
+		
 	// simulate inverting summing amp for neg gain
-	input += bp * slider_neg_lin;
+	input += bp * slider_neg_frac;
 	input = -input;
 		
 	prev_bp = bp;
 	prev_lp = lp;
 	
 	lp = prev_bp*f + prev_lp;	
-	hp = input - prev_bp*SVF_Q - lp;
+	hp = input - prev_bp*current_q - lp;
 	bp = hp*f + prev_bp;
 	
 	// simulate inverting summing amp for pos gain
-	input += bp * slider_pos_lin;
+	input += bp * slider_pos_frac;
 	input = -input;
 	
 	return input;
-	//return input + bp * Ampl_lin;
 }
 
+
+float svf_bandpass(float input) {
+	static float hp[2], bp[2], lp[2], prev_bp[2], prev_lp[2];
+	float f = 2.0f * sin(PI * Fc / FS);
+
+	// pos
+	prev_bp[0] = bp[0];
+	prev_lp[0] = lp[0];
+	
+	lp[0] = prev_bp[0]*f + prev_lp[0];
+	hp[0] = input - prev_bp[0]*current_q - lp[0];
+	bp[0] = hp[0]*f + prev_bp[0];
+	
+	// neg
+	//input = -input;
+	//
+	//prev_bp[1] = bp[1];
+	//prev_lp[1] = lp[1];
+	//
+	//lp[1] = prev_bp[1]*f + prev_lp[1];
+	//hp[1] = input - prev_bp[1]*current_q - lp[1];
+	//bp[1] = hp[1]*f + prev_bp[1];
+	
+	
+	return (-input + bp[0] * slider_pos_frac + bp[1] * slider_neg_frac);
+}
 
 int main(void)
 {
@@ -139,6 +167,8 @@ int main(void)
 	printf("Fc: \t%g\r\n", Fc);
 	printf("Ampl dB: \t%g\r\n", Ampl_db);
 	
+	printf("TRANSFER_COMP_SUM %g \r\n", TRANSFER_COMP_SUM);
+	
 	Ampl_lin = db_to_lin(Ampl_db);
 	
 				
@@ -150,14 +180,14 @@ int main(void)
 			if (PingPong == PING) {
 				
 				for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
-					if (FILTER_ON)	{ TransmitBufR2[i] = svf_bandpass(ReceiveBufR2[i]); }
+					if (FILTER_ON)	{ TransmitBufR2[i] = svf_bandpass_analogequiv(ReceiveBufR2[i]); }
 					else			{ TransmitBufR2[i] = ReceiveBufR2[i]; }
 				}			
 				
 			} else { // == PONG
 				
 				for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
-					if (FILTER_ON)	{ TransmitBufR1[i] = svf_bandpass(ReceiveBufR1[i]); }
+					if (FILTER_ON)	{ TransmitBufR1[i] = svf_bandpass_analogequiv(ReceiveBufR1[i]); }
 					else			{ TransmitBufR1[i] = ReceiveBufR1[i]; }
 				}
 				
@@ -251,8 +281,13 @@ static uint8_t Init_Clock(void)	//run clock @ 120MHz
 	
 }
 
-Pdc *I2SC0_2 = (Pdc *)((uint32_t)I2SC0 + 0x200U);                  /**< \brief (I2SC0 PDC ) Base Address R channel */
 
+float db_to_lin (float db) {
+	return (float) pow(10.0, db/20.0);
+}
+
+
+Pdc *I2SC0_2 = (Pdc *)((uint32_t)I2SC0 + 0x200U);                  /**< \brief (I2SC0 PDC ) Base Address R channel */
 
 void I2SC0_Handler(void) {
 	
@@ -323,10 +358,15 @@ void FLEXCOM1_Handler(void){
 	if (Ampl_db != saved_Ampl_db) {
 		
 		float gain_lin = db_to_lin(Ampl_db);
-		float t1 = db_to_lin(AMPL_DB_LIM_UPPER) + 1.0f;
-		slider_pos_lin = (gain_lin / (1.0f + gain_lin) * t1) - 1.0f;		
-		slider_neg_lin = (1.0f / (1.0f + gain_lin) * t1) - 1.0f;
-		printf("ampl db\t%g\r\ngain\t%g\r\npos\t%g\r\nneg\t%g\r\nsum\t%g\r\n\n", Ampl_db, gain_lin, slider_pos_lin, slider_neg_lin, slider_pos_lin + slider_neg_lin);
+		slider_pos_frac = (gain_lin / (1.0f + gain_lin) * TRANSFER_COMP_SUM) - 1.0f;		
+		slider_neg_frac = (1.0f / (1.0f + gain_lin) * TRANSFER_COMP_SUM) - 1.0f;
+		
+		printf("ampl db\t%g\r\ngain\t%g\r\npos\t%g\r\nneg\t%g\r\nsum\t%g\r\n\n", 
+				Ampl_db, gain_lin, slider_pos_frac, slider_neg_frac, slider_pos_frac + slider_neg_frac);
+		
+		float max_current_frac = gain_lin < 1.0f ? slider_neg_frac : slider_pos_frac;
+		//current_q = SVF_Q * (max_current_frac / BP_TOTALFACTOR);
+		current_q = SVF_Q;
 		
 		saved_Ampl_db = Ampl_db;
 	}
