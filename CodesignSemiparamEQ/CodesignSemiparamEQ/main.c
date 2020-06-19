@@ -66,34 +66,25 @@ int32_t TransmitBufR2[I2SC_BUFFSZ];
 
 
 
-/* SVF */
-#define FS 48000.0
-#define SVF_Q 0.25 // is de reciproce van de eigenlijke Q (dus kleinere SVF_Q == grotere eigenlijke Q == nauwere band)
+/*  */
+#define SR 48000.0
 #define FC_INIT 1000.0
 #define FC_LIM_UPPER 4000.0
 #define FC_LIM_LOWER 250.0
-#define FC_INCR 250.0
 
 #define AMPL_DB_INIT 0.0
 #define AMPL_DB_LIM_UPPER 12.0
 #define AMPL_DB_LIM_LOWER -12.0
-#define AMPL_DB_INCR 1.0
 
-#define BP_TOTALFACTOR		(db_to_lin(AMPL_DB_LIM_UPPER) - 1.0f)
-#define TRANSFER_COMP_SUM	(db_to_lin(AMPL_DB_LIM_UPPER) + 1.0f)
 
 // variables set in rxrdy interrupt
-static volatile float Fc = FC_INIT;
-static volatile float saved_Fc = FC_INIT;
+static volatile float fc = FC_INIT;
+static volatile float saved_fc = FC_INIT;
 
-static volatile float Ampl_db = AMPL_DB_INIT;
-static volatile float Ampl_lin;
-static volatile float saved_Ampl_db = AMPL_DB_INIT;
+static volatile float ampl_db = AMPL_DB_INIT;
+static volatile float ampl_lin;
+static volatile float saved_ampl_db = AMPL_DB_INIT;
 
-static volatile float slider_neg_frac = 0.5;
-static volatile float slider_pos_frac = 0.5;
-
-static volatile float current_q = 0.5 * SVF_Q;
 
 
 
@@ -106,54 +97,12 @@ char floatPrintStr[40] = "%d:\t g:%g \t f:%f \t li:%li \r\n"; // args: {str, ctr
 
 
 
-float svf_bandpass_analogequiv(float input) {
-	static float hp, bp, lp, prev_bp, prev_lp;
-	float f = 2.0f * sin(PI * Fc / FS);
-		
-	// simulate inverting summing amp for neg gain
-	input += bp * slider_neg_frac;
-	input = -input;
-		
-	prev_bp = bp;
-	prev_lp = lp;
-	
-	lp = prev_bp*f + prev_lp;	
-	hp = input - prev_bp*current_q - lp;
-	bp = hp*f + prev_bp;
-	
-	// simulate inverting summing amp for pos gain
-	input += bp * slider_pos_frac;
-	input = -input;
+float dsp(float input) {
 	
 	return input;
 }
 
 
-float svf_bandpass(float input) {
-	static float hp[2], bp[2], lp[2], prev_bp[2], prev_lp[2];
-	float f = 2.0f * sin(PI * Fc / FS);
-
-	// pos
-	prev_bp[0] = bp[0];
-	prev_lp[0] = lp[0];
-	
-	lp[0] = prev_bp[0]*f + prev_lp[0];
-	hp[0] = input - prev_bp[0]*current_q - lp[0];
-	bp[0] = hp[0]*f + prev_bp[0];
-	
-	// neg
-	//input = -input;
-	//
-	//prev_bp[1] = bp[1];
-	//prev_lp[1] = lp[1];
-	//
-	//lp[1] = prev_bp[1]*f + prev_lp[1];
-	//hp[1] = input - prev_bp[1]*current_q - lp[1];
-	//bp[1] = hp[1]*f + prev_bp[1];
-	
-	
-	return (-input + bp[0] * slider_pos_frac + bp[1] * slider_neg_frac);
-}
 
 int main(void)
 {
@@ -164,14 +113,12 @@ int main(void)
 	Init_Board();
 
 	// print initial fc value
-	printf("Fc: \t%g\r\n", Fc);
-	printf("Ampl dB: \t%g\r\n", Ampl_db);
+	printf("Fc: \t%g\r\n", fc);
+	printf("Ampl dB: \t%g\r\n", ampl_db);
 	
-	printf("TRANSFER_COMP_SUM %g \r\n", TRANSFER_COMP_SUM);
 	
-	Ampl_lin = db_to_lin(Ampl_db);
+	ampl_lin = db_to_lin(ampl_db);
 	
-				
 			
 	while (1) {
 	
@@ -180,14 +127,14 @@ int main(void)
 			if (PingPong == PING) {
 				
 				for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
-					if (FILTER_ON)	{ TransmitBufR2[i] = svf_bandpass_analogequiv(ReceiveBufR2[i]); }
+					if (FILTER_ON)	{ TransmitBufR2[i] = dsp(ReceiveBufR2[i]); }
 					else			{ TransmitBufR2[i] = ReceiveBufR2[i]; }
 				}			
 				
 			} else { // == PONG
 				
 				for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
-					if (FILTER_ON)	{ TransmitBufR1[i] = svf_bandpass_analogequiv(ReceiveBufR1[i]); }
+					if (FILTER_ON)	{ TransmitBufR1[i] = dsp(ReceiveBufR1[i]); }
 					else			{ TransmitBufR1[i] = ReceiveBufR1[i]; }
 				}
 				
@@ -301,10 +248,10 @@ void I2SC0_Handler(void) {
 			I2SC0 -> I2SC_RNCR = I2SC_BUFFSZ;
 
 			} else { // PONG
-			I2SC0 -> I2SC_TNPR = (uint32_t)ReceiveBufL2;	//transmit buffer 2
+			I2SC0 -> I2SC_TNPR = (uint32_t)ReceiveBufL2; //transmit buffer 2
 			I2SC0 -> I2SC_TNCR = I2SC_BUFFSZ;
 
-			I2SC0 -> I2SC_RNPR = (uint32_t)ReceiveBufL2;		//read to buffer 2
+			I2SC0 -> I2SC_RNPR = (uint32_t)ReceiveBufL2; //receive to buffer 2
 			I2SC0 -> I2SC_RNCR = I2SC_BUFFSZ;
 		}
 
@@ -336,41 +283,36 @@ void I2SC0_Handler(void) {
 }
 
 
+volatile char ubuf[6];
+volatile uint8_t i;
 
 // USART1 RXRDY interrupt
 void FLEXCOM1_Handler(void){
 	
 	char c = USART1 -> US_RHR;
-	if (c < 91) c += 32; // ghetto method to make lowercase lol
 	
-	switch (c) {
-		case 'q' : if (Fc < FC_LIM_UPPER) Fc += FC_INCR; break;
-		case 'a' : if (Fc > FC_LIM_LOWER) Fc -= FC_INCR; break;
-		case 'w' : if (Ampl_db < AMPL_DB_LIM_UPPER) Ampl_db += AMPL_DB_INCR; break;
-		case 's' : if (Ampl_db > AMPL_DB_LIM_LOWER) Ampl_db -= AMPL_DB_INCR; break;
+	/* if id: put id at end of str (after \0) */
+	if (c == 'a' || c == 'f'){
+		ubuf[5] = c;
+		i = 0;
 	}
-	
-	if (Fc != saved_Fc) {
-		printf("Fc: \t%g\r\n", Fc);
-		saved_Fc = Fc;
+	/* if a digit 0-9 */
+	else if ((c - 48) < 10){
+		ubuf[i++] = c;
 	}
-	
-	if (Ampl_db != saved_Ampl_db) {
+	/* when null terminator received*/
+	else if (c == '\0' && i > 0){
+		ubuf[i] = c;
 		
-		float gain_lin = db_to_lin(Ampl_db);
-		slider_pos_frac = (gain_lin / (1.0f + gain_lin) * TRANSFER_COMP_SUM) - 1.0f;		
-		slider_neg_frac = (1.0f / (1.0f + gain_lin) * TRANSFER_COMP_SUM) - 1.0f;
+		if (ubuf[5] == 'a') ampl_db = atoi(ubuf);
+		else if (ubuf[5] == 'f') fc = atoi(ubuf);
+		//else error;
 		
-		printf("ampl db\t%g\r\ngain\t%g\r\npos\t%g\r\nneg\t%g\r\nsum\t%g\r\n\n", 
-				Ampl_db, gain_lin, slider_pos_frac, slider_neg_frac, slider_pos_frac + slider_neg_frac);
+		//printf("%c %d\r\n", ubuf[5], atoi(ubuf));
 		
-		float max_current_frac = gain_lin < 1.0f ? slider_neg_frac : slider_pos_frac;
-		//current_q = SVF_Q * (max_current_frac / BP_TOTALFACTOR);
-		current_q = SVF_Q;
-		
-		saved_Ampl_db = Ampl_db;
+		ubuf[5] = 0;
 	}
-	
+		
 	USART1 -> US_CR |= US_CR_RSTSTA_Msk; // clears overrun error OVRE bit in receiver, which then clears RXRDY
 }
 
