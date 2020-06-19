@@ -82,11 +82,13 @@
   <armgcc.linker.libraries.Libraries>
     <ListValues>
       <Value>libm</Value>
+      <Value>libarm_cortexM4lf_math.a</Value>
     </ListValues>
   </armgcc.linker.libraries.Libraries>
   <armgcc.linker.libraries.LibrarySearchPaths>
     <ListValues>
       <Value>%24(ProjectDir)\Device_Startup</Value>
+      <Value>C:\Program Files (x86)\Atmel\Studio\7.0\packs\arm\CMSIS\CMSIS_5-5.7.0\CMSIS\DSP\Lib\GCC</Value>
     </ListValues>
   </armgcc.linker.libraries.LibrarySearchPaths>
   <armgcc.linker.optimization.GarbageCollectUnusedSections>True</armgcc.linker.optimization.GarbageCollectUnusedSections>
@@ -134,13 +136,13 @@
   <armgcc.linker.libraries.Libraries>
     <ListValues>
       <Value>libm</Value>
-      <Value>libarm_cortexM4lf_math</Value>
+      <Value>libarm_cortexM4lf_math.a</Value>
     </ListValues>
   </armgcc.linker.libraries.Libraries>
   <armgcc.linker.libraries.LibrarySearchPaths>
     <ListValues>
       <Value>%24(ProjectDir)\Device_Startup</Value>
-      <Value>C:\Program Files (x86)\Atmel\Studio\7.0\packs\arm\cmsis\5.0.1\CMSIS\Lib</Value>
+      <Value>C:\Program Files (x86)\Atmel\Studio\7.0\packs\arm\CMSIS\5.0.1\CMSIS\Lib</Value>
     </ListValues>
   </armgcc.linker.libraries.LibrarySearchPaths>
   <armgcc.linker.optimization.GarbageCollectUnusedSections>True</armgcc.linker.optimization.GarbageCollectUnusedSections>

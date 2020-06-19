@@ -118,7 +118,7 @@ ADDITIONAL_DEPENDENCIES:=
 OUTPUT_FILE_DEP:= ./makedep.mk
 
 LIB_DEP+=  \
-C:/Program\ Files\ (x86)/Atmel/Studio/7.0/packs/arm/cmsis/5.0.1/CMSIS/Lib/libarm_cortexM4lf_math.a
+C:/Program\ Files\ (x86)/Atmel/Studio/7.0/packs/arm/CMSIS/5.0.1/CMSIS/Lib/libarm_cortexM4lf_math.a
 
 LINKER_SCRIPT_DEP+=  \
 ../Device_Startup/samg55j19_flash.ld \
@@ -229,7 +229,7 @@ all: $(OUTPUT_FILE_PATH) $(ADDITIONAL_DEPENDENCIES)
 $(OUTPUT_FILE_PATH): $(OBJS) $(USER_OBJS) $(OUTPUT_FILE_DEP) $(LIB_DEP) $(LINKER_SCRIPT_DEP)
 	@echo Building target: $@
 	@echo Invoking: ARM/GNU Linker : 6.3.1
-	$(QUOTE)C:\Program Files (x86)\Atmel\Studio\7.0\toolchain\arm\arm-gnu-toolchain\bin\arm-none-eabi-gcc.exe$(QUOTE) -o$(OUTPUT_FILE_PATH_AS_ARGS) $(OBJS_AS_ARGS) $(USER_OBJS) $(LIBS) -mthumb -Wl,-Map="CodesignSemiparamEQ.map" -Wl,--start-group -lm -larm_cortexM4lf_math  -Wl,--end-group -L"..\\Device_Startup" -L"C:\Program Files (x86)\Atmel\Studio\7.0\packs\arm\cmsis\5.0.1\CMSIS\Lib"  -Wl,--gc-sections -mcpu=cortex-m4 -mfloat-abi=hard -mfpu=fpv4-sp-d16 -Tsamg55j19_flash.ld  
+	$(QUOTE)C:\Program Files (x86)\Atmel\Studio\7.0\toolchain\arm\arm-gnu-toolchain\bin\arm-none-eabi-gcc.exe$(QUOTE) -o$(OUTPUT_FILE_PATH_AS_ARGS) $(OBJS_AS_ARGS) $(USER_OBJS) $(LIBS) -mthumb -Wl,-Map="CodesignSemiparamEQ.map" -Wl,--start-group -lm -larm_cortexM4lf_math  -Wl,--end-group -L"..\\Device_Startup" -L"C:\Program Files (x86)\Atmel\Studio\7.0\packs\arm\CMSIS\5.0.1\CMSIS\Lib"  -Wl,--gc-sections -mcpu=cortex-m4 -mfloat-abi=hard -mfpu=fpv4-sp-d16 -Tsamg55j19_flash.ld  
 	@echo Finished building target: $@
 	"C:\Program Files (x86)\Atmel\Studio\7.0\toolchain\arm\arm-gnu-toolchain\bin\arm-none-eabi-objcopy.exe" -O binary "CodesignSemiparamEQ.elf" "CodesignSemiparamEQ.bin"
 	"C:\Program Files (x86)\Atmel\Studio\7.0\toolchain\arm\arm-gnu-toolchain\bin\arm-none-eabi-objcopy.exe" -O ihex -R .eeprom -R .fuse -R .lock -R .signature  "CodesignSemiparamEQ.elf" "CodesignSemiparamEQ.hex"
