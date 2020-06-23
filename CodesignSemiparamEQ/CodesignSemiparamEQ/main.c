@@ -66,7 +66,7 @@ int32_t TransmitBufR2[I2SC_BUFFSZ];
 
 
 
-/*  */
+/* params */
 #define SR 48000.0
 #define FC_INIT 1000.0
 #define FC_LIM_UPPER 4000.0
@@ -76,7 +76,6 @@ int32_t TransmitBufR2[I2SC_BUFFSZ];
 #define AMPL_DB_LIM_UPPER 12.0
 #define AMPL_DB_LIM_LOWER -12.0
 
-
 // variables set in rxrdy interrupt
 static volatile float fc = FC_INIT;
 static volatile float saved_fc = FC_INIT;
@@ -85,6 +84,9 @@ static volatile float ampl_db = AMPL_DB_INIT;
 static volatile float ampl_lin;
 static volatile float saved_ampl_db = AMPL_DB_INIT;
 
+// filter
+static q31_t coeffs[5];
+static q63_t biquadState[4];
 
 
 
@@ -97,7 +99,7 @@ char floatPrintStr[40] = "%d:\t g:%g \t f:%f \t li:%li \r\n"; // args: {str, ctr
 
 
 
-float dsp(float input) {
+int32_t dsp(int32_t input) {
 	
 	return input;
 }
@@ -112,12 +114,49 @@ int main(void)
 	/* Setup Board and peripherals */
 	Init_Board();
 
-	// print initial fc value
-	printf("Fc: \t%g\r\n", fc);
-	printf("Ampl dB: \t%g\r\n", ampl_db);
+	/* print initial fc value */
+	//printf("Fc: \t%g\r\n", fc);
+	//printf("Ampl dB: \t%g\r\n", ampl_db);
+	//ampl_lin = db_to_lin(ampl_db);
 	
+	/* init filter */
+	arm_biquad_cas_df1_32x64_ins_q31 BQ;
+	arm_biquad_cas_df1_32x64_init_q31(
+									&BQ,		// biquad struct
+									1,			// num stages
+									coeffs,		// ptr to coeffs (b0 b1 b2 a1 a2)
+									biquadState, // 4*numstages element biquad state buffer
+									0			// postshift depending on coeff format
+									);
 	
-	ampl_lin = db_to_lin(ampl_db);
+	float Q = 2.0f;
+	float fc = 4000.0f;
+	float G = 3.0f;
+	
+	float wc = 2 * M_PI * fc / SR;
+	float alpha = sin(wc) / (Q * 2);
+	
+	float b0 = Q * alpha;
+	float b1 = 0;
+	float b2 = -1 * alpha;
+	float a0 = 1 + alpha;
+	float a1 = -2 * cos(wc);
+	float a2 = 1 - alpha;
+	
+	float coeffs_f32[5];
+	//coeffs_f32[0] = b0 / a0;
+	//coeffs_f32[1] = b1 / a0;
+	//coeffs_f32[2] = b2 / a0;
+	//coeffs_f32[3] = a1 / a0;
+	//coeffs_f32[4] = a2 / a0;
+	coeffs_f32[0] = b0;
+	coeffs_f32[1] = b1;
+	coeffs_f32[2] = b2;
+	coeffs_f32[3] = a1;
+	coeffs_f32[4] = a2;
+	
+	arm_float_to_q31(coeffs_f32, coeffs, 5);
+	
 	
 			
 	while (1) {
@@ -125,18 +164,22 @@ int main(void)
 		if (newdata) {
 
 			if (PingPong == PING) {
+
+				if (FILTER_ON)	{ arm_biquad_cas_df1_32x64_q31(&BQ, ReceiveBufR2, TransmitBufR2, I2SC_BUFFSZ); }
 				
-				for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
-					if (FILTER_ON)	{ TransmitBufR2[i] = dsp(ReceiveBufR2[i]); }
-					else			{ TransmitBufR2[i] = ReceiveBufR2[i]; }
-				}			
-				
+				//for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
+					//if (FILTER_ON)	{ TransmitBufR2[i] = dsp(ReceiveBufR2[i]); }
+					//else			{ TransmitBufR2[i] = ReceiveBufR2[i]; }
+				//}			
+				//
 			} else { // == PONG
 				
-				for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
-					if (FILTER_ON)	{ TransmitBufR1[i] = dsp(ReceiveBufR1[i]); }
-					else			{ TransmitBufR1[i] = ReceiveBufR1[i]; }
-				}
+				if (FILTER_ON)	{ arm_biquad_cas_df1_32x64_q31(&BQ, ReceiveBufR1, TransmitBufR1, I2SC_BUFFSZ); }
+				
+				//for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
+					//if (FILTER_ON)	{ TransmitBufR1[i] = dsp(ReceiveBufR1[i]); }
+					//else			{ TransmitBufR1[i] = ReceiveBufR1[i]; }
+				//}
 				
 			}
 
