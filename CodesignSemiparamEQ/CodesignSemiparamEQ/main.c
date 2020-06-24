@@ -30,13 +30,11 @@
 #include "AK4588EN.h"
 #include "FPU.h"
 #include "arm_math.h"
-//#include "arm_const_structs.h"
 
 
 /* Functions Calls */
 static void Init_Board(void);
 static uint8_t Init_Clock(void);
-static float db_to_lin (float db);
 
 
 /* I2S */
@@ -67,16 +65,16 @@ int32_t TransmitBufR2[I2SC_BUFFSZ];
 
 
 /* params */
-#define SR 48000.0
-#define FC_INIT 1000.0
-#define FC_LIM_UPPER 4000.0
-#define FC_LIM_LOWER 250.0
+#define SR 48000.0f
+#define FC_INIT 1000.0f
+#define FC_LIM_UPPER 4000.0f
+#define FC_LIM_LOWER 250.0f
 
-#define AMPL_DB_INIT 0.0
-#define AMPL_DB_LIM_UPPER 12.0
-#define AMPL_DB_LIM_LOWER -12.0
+#define AMPL_DB_INIT 0.0f
+#define AMPL_DB_LIM_UPPER 12.0f
+#define AMPL_DB_LIM_LOWER -12.0f
 
-// variables set in rxrdy interrupt
+/* variables set in rxrdy interrupt */
 static volatile float fc = FC_INIT;
 static volatile float saved_fc = FC_INIT;
 
@@ -84,12 +82,9 @@ static volatile float ampl_db = AMPL_DB_INIT;
 static volatile float ampl_lin;
 static volatile float saved_ampl_db = AMPL_DB_INIT;
 
-// filter
-static q31_t coeffs[5];
-static q63_t biquadState[4];
-
-
-
+/* filter */
+static float coeffs_f32[5];
+static float bq_f32_state[4];
 
 /* Debug */
 char floatPrintStr[40] = "%d:\t g:%g \t f:%f \t li:%li \r\n"; // args: {str, ctr, value, value, value}
@@ -97,12 +92,14 @@ char floatPrintStr[40] = "%d:\t g:%g \t f:%f \t li:%li \r\n"; // args: {str, ctr
 #define FILTER_ON 1
 
 
+/* db lin utility */
+float db_to_lin (float db) {
+	return pow(10.0, db/20.0);
+}
 
-
-/* necessary default gain for codec board to get unity gain
- * +0.86 dB --> factor 1.1 */
-void gain_default(int32_t *sample){
-	*sample += *sample/10;
+/* apply gain per sample */
+void gain(float *sample, float db){
+	*sample *= db_to_lin(db);
 }
 
 
@@ -113,16 +110,16 @@ int main(void)
 	
 	/* Setup Board and peripherals */
 	Init_Board();
-
-	/* print initial fc value */
-	//printf("Fc: \t%g\r\n", fc);
-	//printf("Ampl dB: \t%g\r\n", ampl_db);
-	//ampl_lin = db_to_lin(ampl_db);
 	
+	
+	
+	printf("pow(10.0, 2.0) %g\r\n", pow(10.0, 2.0));
+
+
 	/* init filter */
-	float Q = 1.0f;
-	float freq = 2000.0f;
-	float G = 3.0f;
+	float Q = 2.0f;
+	float freq = 1000.0f;
+	float G_db = 6.0f;
 	
 	float wc = 2 * M_PI * freq / SR;
 	float alpha = sin(wc) / (Q * 2);
@@ -134,55 +131,64 @@ int main(void)
 	float a1 = -2 * cos(wc);
 	float a2 = 1 - alpha;
 	
-	float coeffs_f32[5];
 	coeffs_f32[0] = b0 / a0;
 	coeffs_f32[1] = b1 / a0;
 	coeffs_f32[2] = b2 / a0;
 	coeffs_f32[3] = -1 * a1 / a0;
 	coeffs_f32[4] = -1 * a2 / a0;
+
 	
-	arm_float_to_q31(coeffs_f32, coeffs, 5);
-
-
-	arm_biquad_cas_df1_32x64_ins_q31 BQ;
-	arm_biquad_cas_df1_32x64_init_q31(
-									&BQ,		// biquad struct
-									1,			// num stages
-									coeffs,		// ptr to coeffs (b0 b1 b2 a1 a2)
-									biquadState, // 4*numstages element biquad state buffer
-									0			// postshift depending on coeff format
+	arm_biquad_casd_df1_inst_f32 bq_f32;
+	arm_biquad_cascade_df1_init_f32 (
+									&bq_f32,		// biquad struct
+									1,				// num stages
+									coeffs_f32,		// ptr to coeffs (b0 b1 b2 a1 a2)
+									bq_f32_state	// 4*numstages element biquad state buffer
 									);
+										
+	float buf_f32[I2SC_BUFFSZ];
 	
-
-	
-	
-			
 	while (1) {
 	
 		if (newdata) {
 
 			if (PingPong == PING) {
 
-				if (FILTER_ON){	
-					arm_biquad_cas_df1_32x64_q31(&BQ, ReceiveBufR2, TransmitBufR2, I2SC_BUFFSZ); 
+				if (FILTER_ON){
+					arm_q31_to_float(ReceiveBufR2, buf_f32, I2SC_BUFFSZ);
+					
+					arm_biquad_cascade_df1_f32(&bq_f32, buf_f32, buf_f32, I2SC_BUFFSZ);			
+					for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
+						/* 0.86 default gain necessary for codec board */
+						gain( buf_f32 + i, G_db);
+					}
+					
+					arm_float_to_q31(buf_f32, TransmitBufR2, I2SC_BUFFSZ);
 				}
-				
-				for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
-					if (FILTER_ON)	{ gain_default(TransmitBufR2 + i); }
-					else			{ TransmitBufR2[i] = ReceiveBufR2[i]; }
+				else {			
+					for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
+						TransmitBufR2[i] = ReceiveBufR2[i];
+					}
 				}
-				
-			} else { // == PONG
+			}
+			else { // == PONG
 				
 				if (FILTER_ON){
-					arm_biquad_cas_df1_32x64_q31(&BQ, ReceiveBufR1, TransmitBufR1, I2SC_BUFFSZ); 
+					arm_q31_to_float(ReceiveBufR1, buf_f32, I2SC_BUFFSZ);
+					
+					arm_biquad_cascade_df1_f32(&bq_f32, buf_f32, buf_f32, I2SC_BUFFSZ);
+					for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
+						/* 0.86 default gain necessary for codec board */
+						gain( buf_f32 + i, G_db);
+					}
+					
+					arm_float_to_q31(buf_f32, TransmitBufR1, I2SC_BUFFSZ);
 				}
-				
-				for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
-					if (FILTER_ON)	{ gain_default(TransmitBufR1 + i); }
-					else			{ TransmitBufR1[i] = ReceiveBufR1[i]; }
+				else {
+					for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
+						TransmitBufR1[i] = ReceiveBufR1[i];
+					}
 				}
-				
 			}
 
 			newdata = 0;
@@ -271,11 +277,6 @@ static uint8_t Init_Clock(void)	//run clock @ 120MHz
 	
 	return 0;
 	
-}
-
-
-float db_to_lin (float db) {
-	return (float) pow(10.0, db/20.0);
 }
 
 
