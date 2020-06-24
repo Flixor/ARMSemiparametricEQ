@@ -99,11 +99,11 @@ char floatPrintStr[40] = "%d:\t g:%g \t f:%f \t li:%li \r\n"; // args: {str, ctr
 
 
 
-int32_t dsp(int32_t input) {
-	
-	return input;
+/* necessary default gain for codec board to get unity gain
+ * +0.86 dB --> factor 1.1 */
+void gain_default(int32_t *sample){
+	*sample += *sample/10;
 }
-
 
 
 int main(void)
@@ -120,6 +120,30 @@ int main(void)
 	//ampl_lin = db_to_lin(ampl_db);
 	
 	/* init filter */
+	float Q = 1.0f;
+	float freq = 2000.0f;
+	float G = 3.0f;
+	
+	float wc = 2 * M_PI * freq / SR;
+	float alpha = sin(wc) / (Q * 2);
+	
+	float b0 = alpha;
+	float b1 = 0;
+	float b2 = -1 * alpha;
+	float a0 = 1 + alpha;
+	float a1 = -2 * cos(wc);
+	float a2 = 1 - alpha;
+	
+	float coeffs_f32[5];
+	coeffs_f32[0] = b0 / a0;
+	coeffs_f32[1] = b1 / a0;
+	coeffs_f32[2] = b2 / a0;
+	coeffs_f32[3] = -1 * a1 / a0;
+	coeffs_f32[4] = -1 * a2 / a0;
+	
+	arm_float_to_q31(coeffs_f32, coeffs, 5);
+
+
 	arm_biquad_cas_df1_32x64_ins_q31 BQ;
 	arm_biquad_cas_df1_32x64_init_q31(
 									&BQ,		// biquad struct
@@ -129,33 +153,7 @@ int main(void)
 									0			// postshift depending on coeff format
 									);
 	
-	float Q = 2.0f;
-	float fc = 4000.0f;
-	float G = 3.0f;
-	
-	float wc = 2 * M_PI * fc / SR;
-	float alpha = sin(wc) / (Q * 2);
-	
-	float b0 = Q * alpha;
-	float b1 = 0;
-	float b2 = -1 * alpha;
-	float a0 = 1 + alpha;
-	float a1 = -2 * cos(wc);
-	float a2 = 1 - alpha;
-	
-	float coeffs_f32[5];
-	//coeffs_f32[0] = b0 / a0;
-	//coeffs_f32[1] = b1 / a0;
-	//coeffs_f32[2] = b2 / a0;
-	//coeffs_f32[3] = a1 / a0;
-	//coeffs_f32[4] = a2 / a0;
-	coeffs_f32[0] = b0;
-	coeffs_f32[1] = b1;
-	coeffs_f32[2] = b2;
-	coeffs_f32[3] = a1;
-	coeffs_f32[4] = a2;
-	
-	arm_float_to_q31(coeffs_f32, coeffs, 5);
+
 	
 	
 			
@@ -165,21 +163,25 @@ int main(void)
 
 			if (PingPong == PING) {
 
-				if (FILTER_ON)	{ arm_biquad_cas_df1_32x64_q31(&BQ, ReceiveBufR2, TransmitBufR2, I2SC_BUFFSZ); }
+				if (FILTER_ON){	
+					arm_biquad_cas_df1_32x64_q31(&BQ, ReceiveBufR2, TransmitBufR2, I2SC_BUFFSZ); 
+				}
 				
-				//for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
-					//if (FILTER_ON)	{ TransmitBufR2[i] = dsp(ReceiveBufR2[i]); }
-					//else			{ TransmitBufR2[i] = ReceiveBufR2[i]; }
-				//}			
-				//
+				for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
+					if (FILTER_ON)	{ gain_default(TransmitBufR2 + i); }
+					else			{ TransmitBufR2[i] = ReceiveBufR2[i]; }
+				}
+				
 			} else { // == PONG
 				
-				if (FILTER_ON)	{ arm_biquad_cas_df1_32x64_q31(&BQ, ReceiveBufR1, TransmitBufR1, I2SC_BUFFSZ); }
+				if (FILTER_ON){
+					arm_biquad_cas_df1_32x64_q31(&BQ, ReceiveBufR1, TransmitBufR1, I2SC_BUFFSZ); 
+				}
 				
-				//for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
-					//if (FILTER_ON)	{ TransmitBufR1[i] = dsp(ReceiveBufR1[i]); }
-					//else			{ TransmitBufR1[i] = ReceiveBufR1[i]; }
-				//}
+				for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
+					if (FILTER_ON)	{ gain_default(TransmitBufR1 + i); }
+					else			{ TransmitBufR1[i] = ReceiveBufR1[i]; }
+				}
 				
 			}
 
