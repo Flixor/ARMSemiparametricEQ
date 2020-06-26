@@ -92,15 +92,15 @@ char floatPrintStr[40] = "%d:\t g:%g \t f:%f \t li:%li \r\n"; // args: {str, ctr
 #define FILTER_ON 1
 
 
-/* db lin utility */
-float db_to_lin (float db) {
-	return pow(10.0, db/20.0);
-}
-
-/* apply gain per sample */
-void gain(float *sample, float db){
-	*sample *= db_to_lin(db);
-}
+///* db lin utility */
+//float db_to_lin (float db) {
+	//return pow(10.0, db/20.0);
+//}
+//
+///* apply gain per sample */
+//void gain(float *sample, float db){
+	//*sample *= db_to_lin(db);
+//}
 
 
 int main(void)
@@ -114,18 +114,19 @@ int main(void)
 
 	/* init filter */
 	float Q = 2.0f;
-	float freq = 1000.0f;
-	float G_db = 6.0f;
+	float freq = 250.0f;
+	float G_db = 6.86f;
+	float gain_lin = pow(10.0, G_db/40.0);
 	
 	float wc = 2 * M_PI * freq / SR;
 	float alpha = sin(wc) / (Q * 2);
 	
-	float b0 = alpha;
+	float b0 = alpha * gain_lin;
 	float b1 = 0;
-	float b2 = -1 * alpha;
-	float a0 = 1 + alpha;
+	float b2 = -1 * alpha * gain_lin;
+	float a0 = 1 + (alpha / gain_lin);
 	float a1 = -2 * cos(wc);
-	float a2 = 1 - alpha;
+	float a2 = 1 - (alpha / gain_lin);
 	
 	coeffs_f32[0] = b0 / a0;
 	coeffs_f32[1] = b1 / a0;
@@ -142,12 +143,10 @@ int main(void)
 									);
 										
 	float buf_f32[I2SC_BUFFSZ];
-	
 	int32_t *rx_buf, *tx_buf;
 	
 	
-	float gain_lin = pow(10.0, -0.86/20.0);
-	printf("gain_lin %8.5f\r\n", gain_lin);
+	printf("gain_lin %g\r\n", gain_lin);
 	
 	
 	while (1) {
@@ -163,16 +162,9 @@ int main(void)
 				tx_buf = TransmitBufR1;
 			}
 			
-			arm_q31_to_float(rx_buf, buf_f32, I2SC_BUFFSZ);
-			
-			if (FILTER_ON){
-					
-				//for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
-					//buf_f32[i] = buf_f32[i] * gain_lin;
-				//}
-				
-				arm_biquad_cascade_df1_f32(&bq_f32, buf_f32, buf_f32, I2SC_BUFFSZ);			
-					
+			if (FILTER_ON){	
+				arm_q31_to_float(rx_buf, buf_f32, I2SC_BUFFSZ);
+				arm_biquad_cascade_df1_f32(&bq_f32, buf_f32, buf_f32, I2SC_BUFFSZ);
 				arm_float_to_q31(buf_f32, tx_buf, I2SC_BUFFSZ);
 			}
 			else {	/* no dsp */		
@@ -340,7 +332,7 @@ void FLEXCOM1_Handler(void){
 		
 		if (ubuf[5] == 'a') ampl_db = atoi(ubuf);
 		else if (ubuf[5] == 'f') fc = atoi(ubuf);
-		//else error;
+		/* else error */
 		
 		//printf("%c %d\r\n", ubuf[5], atoi(ubuf));
 		
