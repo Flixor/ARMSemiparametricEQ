@@ -220,13 +220,13 @@ static void Init_Board(void)
 	AK4588EN_Init();
 	
 	#if (__FPU_USED == 1)
-	UART_Printf("fpu, %d\r\n", ((REG_CPACR & 0xF00000) >> 20));
+	//UART_Printf("fpu, %d\r\n", ((REG_CPACR & 0xF00000) >> 20));
 	#endif
 
 	
 	Init_I2SC(TransmitBufL1, TransmitBufR1, ReceiveBufL1, ReceiveBufR1, I2SC_BUFFSZ);
 
-	UART_Puts("\r\nBoard_Init successful\r\nNow starting program\r\n");
+	//UART_Puts("\r\nBoard_Init successful\r\nNow starting program\r\n");
 }
 
 //chapter 17.3
@@ -318,8 +318,8 @@ void I2SC0_Handler(void) {
 }
 
 
-volatile char ubuf[6];
-volatile uint8_t i;
+static volatile char ubuf[6];
+static volatile uint8_t i;
 
 // USART1 RXRDY interrupt
 void FLEXCOM1_Handler(void){
@@ -332,19 +332,33 @@ void FLEXCOM1_Handler(void){
 		i = 0;
 	}
 	/* if a digit 0-9 */
-	else if ((c - 48) < 10){
-		ubuf[i++] = c;
+	else if (c > 47 && c < 58 && i < 4){
+		ubuf[i] = c;
+		i++;
 	}
 	/* when null terminator received*/
 	else if (c == '\0' && i > 0){
-		ubuf[i] = c;
+		ubuf[i] = '\0';
 		
-		if (ubuf[5] == 'a') ampl_db = atoi(ubuf);
-		else if (ubuf[5] == 'f') fc = atoi(ubuf);
-		/* else error */
-		
-		//printf("%c %d\r\n", ubuf[5], atoi(ubuf));
-		
+		if (ubuf[5] == 'a'){ 
+			float Vampl_new = atoi(ubuf);
+			if (abs(Vampl_new - Vampl) > MIN_V_DEV) { /* more than 20 mV diff in adc reading*/
+				Vampl = Vampl_new;
+				new_ampl = 1;
+				printf("a%g", Vampl);	
+			}
+					
+		}
+		else if (ubuf[5] == 'f'){
+			float Vfreq_new = atoi(ubuf);
+			if (abs(Vfreq_new - Vfreq) > MIN_V_DEV) { /* more than 20 mV diff in adc reading*/
+				Vfreq = Vfreq_new;
+				new_freq = 1;
+				printf("f%g", Vfreq);
+			}
+			
+		}
+				
 		ubuf[5] = 0;
 	}
 		

@@ -128,7 +128,6 @@
       <Value>%24(PackRepoDir)\atmel\SAMG_DFP\2.1.97\samg55\include</Value>
     </ListValues>
   </armgcc.compiler.directories.IncludePaths>
-  <armgcc.compiler.optimization.level>Optimize (-O1)</armgcc.compiler.optimization.level>
   <armgcc.compiler.optimization.PrepareFunctionsForGarbageCollection>True</armgcc.compiler.optimization.PrepareFunctionsForGarbageCollection>
   <armgcc.compiler.optimization.DebugLevel>Maximum (-g3)</armgcc.compiler.optimization.DebugLevel>
   <armgcc.compiler.warnings.AllWarnings>True</armgcc.compiler.warnings.AllWarnings>
@@ -176,9 +175,6 @@
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="I2SC.c">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="IRdata.h">
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="main.c">
