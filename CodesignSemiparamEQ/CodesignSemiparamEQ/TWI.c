@@ -53,7 +53,7 @@ void Init_TWI(void)
 	TWI0 -> TWI_MMR		=	TWI_MMR_IADRSZ_NONE	//no internal device address
 						|	TWI_MMR_DADR(AK4588EN_I2C_ADDR);
 							
-	UART_Puts("TWI Initialized\r\n");	
+	//UART_Puts("TWI Initialized\r\n");	
 	
 }
 

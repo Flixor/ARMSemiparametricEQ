@@ -82,7 +82,7 @@ void Init_I2SC(int32_t *DMAsrcbuffL, int32_t *DMAsrcbuffR, int32_t *DMAdstbuffL,
 	I2SC0 -> I2SC_CR	|=	I2SC_CR_CKEN;	//generate clock
 		
 				
-	UART_Puts("I2SC Initialized\r\n");	
+	//UART_Puts("I2SC Initialized\r\n");	
 	
 }
 

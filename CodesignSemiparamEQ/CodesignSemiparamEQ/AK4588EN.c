@@ -128,7 +128,7 @@ uint8_t AK4588EN_Init(void)
 	TWI0 -> TWI_CR	= TWI_CR_STOP; //issue stop
 	while (!(TWI0 -> TWI_SR & TWI_SR_TXCOMP)); //transfer not done yet
 	
-	UART_Puts("Audio Codec Initialized\r\n");
+	//UART_Puts("Audio Codec Initialized\r\n");
 	
 	return 1;
 }
