@@ -63,44 +63,49 @@ int32_t TransmitBufR1[I2SC_BUFFSZ];
 int32_t TransmitBufR2[I2SC_BUFFSZ];
 
 
-
 /* params */
 #define SR 48000.0f
-#define FC_INIT 1000.0f
-#define FC_LIM_UPPER 4000.0f
-#define FC_LIM_LOWER 250.0f
 
-#define AMPL_DB_INIT 0.0f
-#define AMPL_DB_LIM_UPPER 12.0f
-#define AMPL_DB_LIM_LOWER -12.0f
+#define MIN_V_DEV 15.0f
 
-/* variables set in rxrdy interrupt */
-static volatile float fc = FC_INIT;
-static volatile float saved_fc = FC_INIT;
+/* variables set in uart rxrdy interrupt */
+static volatile float Vfreq = 1000.0f;
+static volatile uint8_t new_freq;
 
-static volatile float ampl_db = AMPL_DB_INIT;
-static volatile float ampl_lin;
-static volatile float saved_ampl_db = AMPL_DB_INIT;
+static volatile float Vampl = 2000.0f;
+static volatile uint8_t new_ampl;
 
-/* filter */
-static float coeffs_f32[5];
-static float bq_f32_state[4];
 
 /* Debug */
-char floatPrintStr[40] = "%d:\t g:%g \t f:%f \t li:%li \r\n"; // args: {str, ctr, value, value, value}
-
-#define FILTER_ON 1
+#define FILTER_ON 0
 
 
-///* db lin utility */
-//float db_to_lin (float db) {
-	//return pow(10.0, db/20.0);
-//}
-//
-///* apply gain per sample */
-//void gain(float *sample, float db){
-	//*sample *= db_to_lin(db);
-//}
+/* set coefficients
+ * Q is always 2.0 */
+static void calc_set_coeffs(float *coeffs, float freq, float gain_lin){
+	float wc = 2 * M_PI * freq / SR;
+	float alpha = sin(wc) / (2.0 * 2); /* Q == 2.0 */
+	
+	float b0 = alpha * gain_lin;
+	float b1 = 0;
+	float b2 = -1 * alpha * gain_lin;
+	float a0 = 1 + (alpha / gain_lin);
+	float a1 = -2 * cos(wc);
+	float a2 = 1 - (alpha / gain_lin);
+	
+	coeffs[0] = b0 / a0;
+	coeffs[1] = b1 / a0;
+	coeffs[2] = b2 / a0;
+	coeffs[3] = -1 * a1 / a0;
+	coeffs[4] = -1 * a2 / a0;	
+}
+
+/* a standard +0.87 dB is added because of the codec board 
+ * yes, db needs to be divided by 40 in exponent, to get correct coefficient value */
+float Vampl_to_gain_lin(float V){
+	float gain_db = 20 * log((V / 2000.0f) + 1.0f) / log(10) + 0.87f;
+	return pow(10.0, gain_db/40.0);	
+}
 
 
 int main(void)
@@ -113,26 +118,13 @@ int main(void)
 	
 
 	/* init filter */
-	float Q = 2.0f;
-	float freq = 250.0f;
-	float G_db = 6.86f;
-	float gain_lin = pow(10.0, G_db/40.0);
+	float freq = Vfreq;
+	float gain_lin = Vampl_to_gain_lin(Vampl);
+	float coeffs_f32[5];
 	
-	float wc = 2 * M_PI * freq / SR;
-	float alpha = sin(wc) / (Q * 2);
+	calc_set_coeffs(coeffs_f32, freq, gain_lin);
 	
-	float b0 = alpha * gain_lin;
-	float b1 = 0;
-	float b2 = -1 * alpha * gain_lin;
-	float a0 = 1 + (alpha / gain_lin);
-	float a1 = -2 * cos(wc);
-	float a2 = 1 - (alpha / gain_lin);
-	
-	coeffs_f32[0] = b0 / a0;
-	coeffs_f32[1] = b1 / a0;
-	coeffs_f32[2] = b2 / a0;
-	coeffs_f32[3] = -1 * a1 / a0;
-	coeffs_f32[4] = -1 * a2 / a0;
+	float bq_f32_state[4];
 
 	arm_biquad_casd_df1_inst_f32 bq_f32;
 	arm_biquad_cascade_df1_init_f32 (
@@ -147,10 +139,12 @@ int main(void)
 	
 	
 	printf("gain_lin %g\r\n", gain_lin);
+
 	
 	
 	while (1) {
 	
+		/* run dsp when there's new audio data */
 		if (newdata) {
 
 			if (PingPong == PING) {
@@ -172,9 +166,24 @@ int main(void)
 					tx_buf[i] = rx_buf[i];
 				}
 			}
-
+			
 			newdata = 0;									
 		}	
+		
+		/* calculate new coefficients when there's a new Vfreq */
+		if (new_freq) {
+			freq = Vfreq;
+			calc_set_coeffs(coeffs_f32, freq, gain_lin);
+			new_freq = 0;
+		}
+		
+		/* calculate new coefficients when there's a new Vampl */
+		if (new_ampl) {
+			gain_lin = Vampl_to_gain_lin(Vampl);
+			calc_set_coeffs(coeffs_f32, freq, gain_lin);
+			new_ampl = 0;
+		}
+		
 		
 		asm("nop");
 	}
