@@ -111,10 +111,6 @@ int main(void)
 	/* Setup Board and peripherals */
 	Init_Board();
 	
-	
-	
-	printf("pow(10.0, 2.0) %g\r\n", pow(10.0, 2.0));
-
 
 	/* init filter */
 	float Q = 2.0f;
@@ -137,7 +133,6 @@ int main(void)
 	coeffs_f32[3] = -1 * a1 / a0;
 	coeffs_f32[4] = -1 * a2 / a0;
 
-	
 	arm_biquad_casd_df1_inst_f32 bq_f32;
 	arm_biquad_cascade_df1_init_f32 (
 									&bq_f32,		// biquad struct
@@ -148,55 +143,48 @@ int main(void)
 										
 	float buf_f32[I2SC_BUFFSZ];
 	
+	int32_t *rx_buf, *tx_buf;
+	
+	
+	float gain_lin = pow(10.0, -0.86/20.0);
+	printf("gain_lin %8.5f\r\n", gain_lin);
+	
+	
 	while (1) {
 	
 		if (newdata) {
 
 			if (PingPong == PING) {
-
-				if (FILTER_ON){
-					arm_q31_to_float(ReceiveBufR2, buf_f32, I2SC_BUFFSZ);
-					
-					arm_biquad_cascade_df1_f32(&bq_f32, buf_f32, buf_f32, I2SC_BUFFSZ);			
-					for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
-						/* 0.86 default gain necessary for codec board */
-						gain( buf_f32 + i, G_db);
-					}
-					
-					arm_float_to_q31(buf_f32, TransmitBufR2, I2SC_BUFFSZ);
-				}
-				else {			
-					for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
-						TransmitBufR2[i] = ReceiveBufR2[i];
-					}
-				}
+				rx_buf = ReceiveBufR2;
+				tx_buf = TransmitBufR2;
 			}
-			else { // == PONG
+			else { /* == PONG */
+				rx_buf = ReceiveBufR1;
+				tx_buf = TransmitBufR1;
+			}
+			
+			arm_q31_to_float(rx_buf, buf_f32, I2SC_BUFFSZ);
+			
+			if (FILTER_ON){
+					
+				//for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
+					//buf_f32[i] = buf_f32[i] * gain_lin;
+				//}
 				
-				if (FILTER_ON){
-					arm_q31_to_float(ReceiveBufR1, buf_f32, I2SC_BUFFSZ);
+				arm_biquad_cascade_df1_f32(&bq_f32, buf_f32, buf_f32, I2SC_BUFFSZ);			
 					
-					arm_biquad_cascade_df1_f32(&bq_f32, buf_f32, buf_f32, I2SC_BUFFSZ);
-					for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
-						/* 0.86 default gain necessary for codec board */
-						gain( buf_f32 + i, G_db);
-					}
-					
-					arm_float_to_q31(buf_f32, TransmitBufR1, I2SC_BUFFSZ);
-				}
-				else {
-					for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
-						TransmitBufR1[i] = ReceiveBufR1[i];
-					}
+				arm_float_to_q31(buf_f32, tx_buf, I2SC_BUFFSZ);
+			}
+			else {	/* no dsp */		
+				for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
+					tx_buf[i] = rx_buf[i];
 				}
 			}
 
-			newdata = 0;
-									
+			newdata = 0;									
 		}	
 		
 		asm("nop");
-		
 	}
 }
 
