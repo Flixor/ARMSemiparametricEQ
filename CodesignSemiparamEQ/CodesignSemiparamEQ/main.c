@@ -69,15 +69,15 @@ int32_t TransmitBufR2[I2SC_BUFFSZ];
 #define MIN_V_DEV 15.0f
 
 /* variables set in uart rxrdy interrupt */
-static volatile float Vfreq = 1000.0f;
+static volatile float Vfreq = 250.0f;
 static volatile uint8_t new_freq;
 
-static volatile float Vampl = 2000.0f;
+static volatile float Vampl = 120.0f;
 static volatile uint8_t new_ampl;
 
 
 /* Debug */
-#define FILTER_ON 0
+#define FILTER_ON 1
 
 
 /* set coefficients
@@ -103,7 +103,13 @@ static void calc_set_coeffs(float *coeffs, float freq, float gain_lin){
 /* a standard +0.87 dB is added because of the codec board 
  * yes, db needs to be divided by 40 in exponent, to get correct coefficient value */
 float Vampl_to_gain_lin(float V){
-	float gain_db = 20 * log((V / 2000.0f) + 1.0f) / log(10) + 0.87f;
+	
+	/* stand-alone version (no summing with orig signal) */
+	float gain_db = 20 * log((V / 2000.0f) + 1.0f) / log(10) + 0.92f;
+	
+	/* when summing with orig signal */
+	//float gain_db = 20 * log(V / 2000.0f) / log(10) + 0.92f;
+	
 	return pow(10.0, gain_db/40.0);	
 }
 
@@ -138,15 +144,15 @@ int main(void)
 	int32_t *rx_buf, *tx_buf;
 	
 	
-	printf("gain_lin %g\r\n", gain_lin);
-
+	new_ampl = 1;
+	new_freq = 1;
 	
 	
 	while (1) {
 	
 		/* run dsp when there's new audio data */
 		if (newdata) {
-
+			
 			if (PingPong == PING) {
 				rx_buf = ReceiveBufR2;
 				tx_buf = TransmitBufR2;
@@ -155,6 +161,8 @@ int main(void)
 				rx_buf = ReceiveBufR1;
 				tx_buf = TransmitBufR1;
 			}
+
+			//printf("rx_buf[0] %li \r\n", rx_buf[0]);
 			
 			if (FILTER_ON){	
 				arm_q31_to_float(rx_buf, buf_f32, I2SC_BUFFSZ);
@@ -175,6 +183,7 @@ int main(void)
 			freq = Vfreq;
 			calc_set_coeffs(coeffs_f32, freq, gain_lin);
 			new_freq = 0;
+			printf("freq %g\r\n", Vfreq);
 		}
 		
 		/* calculate new coefficients when there's a new Vampl */
@@ -182,6 +191,7 @@ int main(void)
 			gain_lin = Vampl_to_gain_lin(Vampl);
 			calc_set_coeffs(coeffs_f32, freq, gain_lin);
 			new_ampl = 0;
+			printf("gain db %g\r\n", 20 * log((Vampl / 2000.0f) + 1.0f) / log(10));
 		}
 		
 		
@@ -220,13 +230,13 @@ static void Init_Board(void)
 	AK4588EN_Init();
 	
 	#if (__FPU_USED == 1)
-	//UART_Printf("fpu, %d\r\n", ((REG_CPACR & 0xF00000) >> 20));
+	UART_Printf("fpu, %d\r\n", ((REG_CPACR & 0xF00000) >> 20));
 	#endif
 
 	
 	Init_I2SC(TransmitBufL1, TransmitBufR1, ReceiveBufL1, ReceiveBufR1, I2SC_BUFFSZ);
 
-	//UART_Puts("\r\nBoard_Init successful\r\nNow starting program\r\n");
+	UART_Puts("\r\nBoard_Init successful\r\nNow starting program\r\n");
 }
 
 //chapter 17.3
@@ -337,7 +347,7 @@ void FLEXCOM1_Handler(void){
 		i++;
 	}
 	/* when null terminator received*/
-	else if (c == '\0' && i > 0){
+	else if (c == 'k' && i > 0){
 		ubuf[i] = '\0';
 		
 		if (ubuf[5] == 'a'){ 
@@ -345,7 +355,6 @@ void FLEXCOM1_Handler(void){
 			if (abs(Vampl_new - Vampl) > MIN_V_DEV) { /* more than 20 mV diff in adc reading*/
 				Vampl = Vampl_new;
 				new_ampl = 1;
-				printf("a%g", Vampl);	
 			}
 					
 		}
@@ -354,7 +363,6 @@ void FLEXCOM1_Handler(void){
 			if (abs(Vfreq_new - Vfreq) > MIN_V_DEV) { /* more than 20 mV diff in adc reading*/
 				Vfreq = Vfreq_new;
 				new_freq = 1;
-				printf("f%g", Vfreq);
 			}
 			
 		}

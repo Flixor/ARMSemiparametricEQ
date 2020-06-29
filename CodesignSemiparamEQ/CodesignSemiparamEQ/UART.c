@@ -82,7 +82,7 @@ void Init_UART(void)
 	setbuf(stdin, NULL);	//dont buffer stdin
 						
 						
-	//printf("UART Initialized with printf\r\n");	
+	printf("UART Initialized with printf\r\n");	
 }
 
 static void USART_PioSetup(void)
