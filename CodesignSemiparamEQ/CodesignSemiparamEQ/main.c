@@ -69,10 +69,10 @@ int32_t TransmitBufR2[I2SC_BUFFSZ];
 #define MIN_V_DEV 15.0f
 
 /* variables set in uart rxrdy interrupt */
-static volatile float Vfreq = 250.0f;
+static volatile float Vfreq = 1000.0f;
 static volatile uint8_t new_freq;
 
-static volatile float Vampl = 120.0f;
+static volatile float Vampl = 2000.0f;
 static volatile uint8_t new_ampl;
 
 
@@ -105,10 +105,10 @@ static void calc_set_coeffs(float *coeffs, float freq, float gain_lin){
 float Vampl_to_gain_lin(float V){
 	
 	/* stand-alone version (no summing with orig signal) */
-	float gain_db = 20 * log((V / 2000.0f) + 1.0f) / log(10) + 0.92f;
+	//float gain_db = 20 * log((V / 2000.0f) + 1.0f) / log(10) + 0.92f;
 	
 	/* when summing with orig signal */
-	//float gain_db = 20 * log(V / 2000.0f) / log(10) + 0.92f;
+	float gain_db = 20 * log(V / 2000.0f) / log(10) + 0.92f;
 	
 	return pow(10.0, gain_db/40.0);	
 }
