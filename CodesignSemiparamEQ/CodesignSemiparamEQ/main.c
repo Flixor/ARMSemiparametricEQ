@@ -66,7 +66,7 @@ int32_t TransmitBufR2[I2SC_BUFFSZ];
 /* params */
 #define SR 48000.0f
 
-#define MIN_V_DEV 15.0f
+#define MIN_V_DEV 18.0f
 
 /* variables set in uart rxrdy interrupt */
 static volatile float Vfreq = 1000.0f;
@@ -80,37 +80,38 @@ static volatile uint8_t new_ampl;
 #define FILTER_ON 1
 
 
-/* set coefficients
- * Q is always 2.0 */
-static void calc_set_coeffs(float *coeffs, float freq, float gain_lin){
-	float wc = 2 * M_PI * freq / SR;
-	float alpha = sin(wc) / (2.0 * 2); /* Q == 2.0 */
+/* calculate and set coefficients */
+static void calc_set_coeffs(float *coeffs, float V_freq, float V_ampl){
+		
+	/* gain of BP, for summing with orig signal */
+	float gain_db_coeff = 20 * log(V_ampl / 2000.0f) / log(10);
+	/* compensate default codec offset */
+	gain_db_coeff += 0.9f; 
+	/* yes, db needs to be divided by 40 in exponent, to get correct coefficient value */
+	float gain_lin_coeff = pow(10.0, gain_db_coeff/40.0);
+
+	/* total gain (after summing with orig signal) */
+	float gain_db_total = 20 * log((V_ampl / 2000.0f) + 1.0f) / log(10);
+		
+	float Q = 2.7f - (2.0f / 15.0f * gain_db_total);
+	//printf("Q %g\r\n", Q);
 	
-	float b0 = alpha * gain_lin;
+	/* Vfreq [mV] == center frequency of BP */
+	float wc = 2 * M_PI * V_freq / SR;
+	float alpha = sin(wc) / (Q * 2); 
+	
+	float b0 = alpha * gain_lin_coeff;
 	float b1 = 0;
-	float b2 = -1 * alpha * gain_lin;
-	float a0 = 1 + (alpha / gain_lin);
+	float b2 = -1 * alpha * gain_lin_coeff;
+	float a0 = 1 + (alpha / gain_lin_coeff);
 	float a1 = -2 * cos(wc);
-	float a2 = 1 - (alpha / gain_lin);
+	float a2 = 1 - (alpha / gain_lin_coeff);
 	
 	coeffs[0] = b0 / a0;
 	coeffs[1] = b1 / a0;
 	coeffs[2] = b2 / a0;
 	coeffs[3] = -1 * a1 / a0;
 	coeffs[4] = -1 * a2 / a0;	
-}
-
-/* a standard +0.87 dB is added because of the codec board 
- * yes, db needs to be divided by 40 in exponent, to get correct coefficient value */
-float Vampl_to_gain_lin(float V){
-	
-	/* stand-alone version (no summing with orig signal) */
-	//float gain_db = 20 * log((V / 2000.0f) + 1.0f) / log(10) + 0.92f;
-	
-	/* when summing with orig signal */
-	float gain_db = 20 * log(V / 2000.0f) / log(10) + 0.92f;
-	
-	return pow(10.0, gain_db/40.0);	
 }
 
 
@@ -124,11 +125,8 @@ int main(void)
 	
 
 	/* init filter */
-	float freq = Vfreq;
-	float gain_lin = Vampl_to_gain_lin(Vampl);
 	float coeffs_f32[5];
-	
-	calc_set_coeffs(coeffs_f32, freq, gain_lin);
+	calc_set_coeffs(coeffs_f32, Vfreq, Vampl);
 	
 	float bq_f32_state[4];
 
@@ -141,12 +139,14 @@ int main(void)
 									);
 										
 	float buf_f32[I2SC_BUFFSZ];
+	float buf_add_f32[I2SC_BUFFSZ];
+	
 	int32_t *rx_buf, *tx_buf;
 	
+	float default_gain = pow(10.0, 0.9/20.0);
 	
 	new_ampl = 1;
 	new_freq = 1;
-	
 	
 	while (1) {
 	
@@ -165,9 +165,21 @@ int main(void)
 			//printf("rx_buf[0] %li \r\n", rx_buf[0]);
 			
 			if (FILTER_ON){	
+				/* convert to float */
 				arm_q31_to_float(rx_buf, buf_f32, I2SC_BUFFSZ);
+				/* copy to addition buffer and apply default gain */
+				for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
+					buf_add_f32[i] = buf_f32[i] * default_gain;
+				}
+				/* apply bandpass */
 				arm_biquad_cascade_df1_f32(&bq_f32, buf_f32, buf_f32, I2SC_BUFFSZ);
+				/* sum with original gained signal */
+				for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
+					buf_f32[i] += buf_add_f32[i];
+				}
+				/* convert back to q31 */
 				arm_float_to_q31(buf_f32, tx_buf, I2SC_BUFFSZ);
+
 			}
 			else {	/* no dsp */		
 				for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
@@ -180,16 +192,14 @@ int main(void)
 		
 		/* calculate new coefficients when there's a new Vfreq */
 		if (new_freq) {
-			freq = Vfreq;
-			calc_set_coeffs(coeffs_f32, freq, gain_lin);
+			calc_set_coeffs(coeffs_f32, Vfreq, Vampl);
 			new_freq = 0;
 			printf("freq %g\r\n", Vfreq);
 		}
 		
 		/* calculate new coefficients when there's a new Vampl */
 		if (new_ampl) {
-			gain_lin = Vampl_to_gain_lin(Vampl);
-			calc_set_coeffs(coeffs_f32, freq, gain_lin);
+			calc_set_coeffs(coeffs_f32, Vfreq, Vampl);
 			new_ampl = 0;
 			printf("gain db %g\r\n", 20 * log((Vampl / 2000.0f) + 1.0f) / log(10));
 		}
@@ -292,7 +302,7 @@ void I2SC0_Handler(void) {
 			I2SC0 -> I2SC_RNPR = (uint32_t)ReceiveBufL1; //receive to buffer 1
 			I2SC0 -> I2SC_RNCR = I2SC_BUFFSZ;
 
-			} else { // PONG
+		} else { // PONG
 			I2SC0 -> I2SC_TNPR = (uint32_t)ReceiveBufL2; //transmit buffer 2
 			I2SC0 -> I2SC_TNCR = I2SC_BUFFSZ;
 
@@ -312,7 +322,7 @@ void I2SC0_Handler(void) {
 			I2SC0_2 -> PERIPH_RNCR = I2SC_BUFFSZ;
 
 			PingPong = PONG; 
-			} else { // PONG
+		} else { // PONG
 			I2SC0_2 -> PERIPH_TNPR = (uint32_t)TransmitBufR2;
 			I2SC0_2 -> PERIPH_TNCR = I2SC_BUFFSZ;
 			
@@ -346,7 +356,7 @@ void FLEXCOM1_Handler(void){
 		ubuf[i] = c;
 		i++;
 	}
-	/* when null terminator received*/
+	/* when terminating character received*/
 	else if (c == 'k' && i > 0){
 		ubuf[i] = '\0';
 		
