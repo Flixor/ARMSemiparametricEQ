@@ -89,28 +89,50 @@ static volatile uint8_t new_direction;
 static void calc_set_coeffs(float *coeffs, float V_freq, float V_ampl){
 		
 	/* gain of BP, for summing with orig signal */
-	float gain_db_coeff = 20 * log(V_ampl / 2000.0f) / log(10);
-	/* compensate default codec offset */
-	gain_db_coeff += 0.9f; 
-	/* yes, db needs to be divided by 40 in exponent, to get correct coefficient value */
-	float gain_lin_coeff = pow(10.0, gain_db_coeff/40.0);
+	float gain_db_coeff_boost = 20 * log(V_ampl / 2000.0f) / log(10);
+	/* yes, db needs to be divided by 40 in exponent (an extra sqrt), to get correct coefficient value */
+	float gain_lin_coeff_boost = pow(10.0, gain_db_coeff_boost/40.0);
 
+	/* for cut */
+	float gain_db_coeff_cut = 20 * log(2000.0f / V_ampl + 1.0f) / log(10) * -1;
+	float gain_lin_coeff_cut = pow(10.0, gain_db_coeff_cut/40.0);	
+	
 	/* total gain (after summing with orig signal) */
-	float gain_db_total = 20 * log((V_ampl / 2000.0f) + 1.0f) / log(10);
-		
-	float Q = 2.7f - (2.0f / 15.0f * gain_db_total);
-	//printf("Q %g\r\n", Q);
+	float gain_lin_total = V_ampl / 2000.0f + 1.0f;
+	float gain_db_total = 20 * log(gain_lin_total) / log(10);
 	
 	/* Vfreq [mV] == center frequency of BP */
 	float wc = 2 * M_PI * V_freq / SR;
-	float alpha = sin(wc) / (Q * 2); 
 	
-	float b0 = alpha * gain_lin_coeff;
-	float b1 = 0;
-	float b2 = -1 * alpha * gain_lin_coeff;
-	float a0 = 1 + (alpha / gain_lin_coeff);
-	float a1 = -2 * cos(wc);
-	float a2 = 1 - (alpha / gain_lin_coeff);
+	/* should actually be alpha = sin(wc) / (Q * 2) here, 
+	 * but we do a magic Q adjustment...
+	 * I don't make the rules around here
+	 * Measurements say jump, I say how high */
+	float Q_drift = Q * (1 - wc / (M_PI * 4));
+	float alpha_boost = sin(wc) * gain_lin_coeff_boost / (Q_drift * 2);
+	float alpha_cut = sin(wc) * gain_lin_coeff_cut * gain_lin_total / (Q_drift * 2);
+	
+	
+	float a0, a1, a2, b0, b1, b2;
+	/* boost */
+	if (boost) {
+		b0 = alpha_boost * gain_lin_coeff_boost;
+		b1 = 0;
+		b2 = -1 * alpha_boost * gain_lin_coeff_boost;
+		a0 = 1 + (alpha_boost / gain_lin_coeff_boost);
+		a1 = -2 * cos(wc);
+		a2 = 1 - (alpha_boost/ gain_lin_coeff_boost);
+	}
+	/* cut */
+	else {
+		b0 = -1 * alpha_cut * gain_lin_coeff_cut;
+		b1 = 0;
+		b2 = alpha_cut * gain_lin_coeff_cut;
+		a0 = 1 + (alpha_cut / gain_lin_coeff_cut);
+		a1 = -2 * cos(wc);
+		a2 = 1 - (alpha_cut / gain_lin_coeff_cut);
+	}
+
 	
 	coeffs[0] = b0 / a0;
 	coeffs[1] = b1 / a0;
