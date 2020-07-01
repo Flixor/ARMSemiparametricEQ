@@ -75,6 +75,11 @@ static volatile uint8_t new_freq;
 static volatile float Vampl = 2000.0f;
 static volatile uint8_t new_ampl;
 
+static volatile float Q = 2.0f;
+static volatile uint8_t new_q;
+
+static volatile uint8_t boost = 0;
+static volatile uint8_t new_direction;
 
 /* Debug */
 #define FILTER_ON 1
@@ -204,7 +209,19 @@ int main(void)
 			printf("gain db %g\r\n", 20 * log((Vampl / 2000.0f) + 1.0f) / log(10));
 		}
 		
+		if (new_q) {
+			calc_set_coeffs(coeffs_f32, Vfreq, Vampl);
+			new_q = 0;			
+			printf("Q %g\r\n", Q);
+		}
 		
+		if (new_direction){
+			calc_set_coeffs(coeffs_f32, Vfreq, Vampl);
+			new_direction = 0;
+			printf("%s\r\n", boost ? "BOOST" : "CUT");
+		}
+		
+
 		asm("nop");
 	}
 }
@@ -347,7 +364,7 @@ void FLEXCOM1_Handler(void){
 	char c = USART1 -> US_RHR;
 	
 	/* if id: put id at end of str (after \0) */
-	if (c == 'a' || c == 'f'){
+	if (c == 'a' || c == 'f' || c == 'q'){
 		ubuf[5] = c;
 		i = 0;
 	}
@@ -376,8 +393,22 @@ void FLEXCOM1_Handler(void){
 			}
 			
 		}
+		else if (ubuf[5] == 'q'){
+			Q = atoi(ubuf);
+			Q /= 1000.0f;
+			new_q = 1;			
+		}
 				
 		ubuf[5] = 0;
+	}
+	/* to flip boost and cut */
+	else if (c == 'c'){
+		boost = 0;
+		new_direction = 1;
+	}
+	else if (c == 'b'){
+		boost = 1;
+		new_direction = 1;
 	}
 		
 	USART1 -> US_CR |= US_CR_RSTSTA_Msk; // clears overrun error OVRE bit in receiver, which then clears RXRDY
