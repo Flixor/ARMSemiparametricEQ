@@ -86,7 +86,7 @@ static volatile uint8_t new_direction;
 
 
 /* calculate and set coefficients */
-static void calc_set_coeffs(float *coeffs, float V_freq, float V_ampl){
+static void calc_set_coeffs(float *coeffs_boost, float *coeffs_cut, float V_freq, float V_ampl){
 		
 	/* gain of BP, for summing with orig signal */
 	float gain_db_coeff_boost = 20 * log(V_ampl / 2000.0f) / log(10);
@@ -99,7 +99,7 @@ static void calc_set_coeffs(float *coeffs, float V_freq, float V_ampl){
 	
 	/* total gain (after summing with orig signal) */
 	float gain_lin_total = V_ampl / 2000.0f + 1.0f;
-	float gain_db_total = 20 * log(gain_lin_total) / log(10);
+	//float gain_db_total = 20 * log(gain_lin_total) / log(10);
 	
 	/* Vfreq [mV] == center frequency of BP */
 	float wc = 2 * M_PI * V_freq / SR;
@@ -114,31 +114,32 @@ static void calc_set_coeffs(float *coeffs, float V_freq, float V_ampl){
 	
 	
 	float a0, a1, a2, b0, b1, b2;
-	/* boost */
-	if (boost) {
-		b0 = alpha_boost * gain_lin_coeff_boost;
-		b1 = 0;
-		b2 = -1 * alpha_boost * gain_lin_coeff_boost;
-		a0 = 1 + (alpha_boost / gain_lin_coeff_boost);
-		a1 = -2 * cos(wc);
-		a2 = 1 - (alpha_boost/ gain_lin_coeff_boost);
-	}
-	/* cut */
-	else {
-		b0 = -1 * alpha_cut * gain_lin_coeff_cut;
-		b1 = 0;
-		b2 = alpha_cut * gain_lin_coeff_cut;
-		a0 = 1 + (alpha_cut / gain_lin_coeff_cut);
-		a1 = -2 * cos(wc);
-		a2 = 1 - (alpha_cut / gain_lin_coeff_cut);
-	}
-
 	
-	coeffs[0] = b0 / a0;
-	coeffs[1] = b1 / a0;
-	coeffs[2] = b2 / a0;
-	coeffs[3] = -1 * a1 / a0;
-	coeffs[4] = -1 * a2 / a0;	
+	/* boost */
+	b0 = alpha_boost * gain_lin_coeff_boost;
+	b1 = 0;
+	b2 = -1 * alpha_boost * gain_lin_coeff_boost;
+	a0 = 1 + (alpha_boost / gain_lin_coeff_boost);
+	a1 = -2 * cos(wc);
+	a2 = 1 - (alpha_boost/ gain_lin_coeff_boost);
+	coeffs_boost[0] = b0 / a0;
+	coeffs_boost[1] = b1 / a0;
+	coeffs_boost[2] = b2 / a0;
+	coeffs_boost[3] = -1 * a1 / a0;
+	coeffs_boost[4] = -1 * a2 / a0;	
+	
+	/* cut */
+	b0 = -1 * alpha_cut * gain_lin_coeff_cut;
+	b1 = 0;
+	b2 = alpha_cut * gain_lin_coeff_cut;
+	a0 = 1 + (alpha_cut / gain_lin_coeff_cut);
+	a1 = -2 * cos(wc);
+	a2 = 1 - (alpha_cut / gain_lin_coeff_cut);	
+	coeffs_cut[0] = b0 / a0;
+	coeffs_cut[1] = b1 / a0;
+	coeffs_cut[2] = b2 / a0;
+	coeffs_cut[3] = -1 * a1 / a0;
+	coeffs_cut[4] = -1 * a2 / a0;	
 }
 
 
@@ -152,23 +153,34 @@ int main(void)
 	
 
 	/* init filter */
-	float coeffs_f32[5];
-	calc_set_coeffs(coeffs_f32, Vfreq, Vampl);
+	float coeffs_f32_boost[5];
+	float coeffs_f32_cut[5];
+	calc_set_coeffs(coeffs_f32_boost, coeffs_f32_cut, Vfreq, Vampl);
 	
-	float bq_f32_state[4];
+	float bq_f32_state_boost[4];
+	float bq_f32_state_cut[4];
 
-	arm_biquad_casd_df1_inst_f32 bq_f32;
+	arm_biquad_casd_df1_inst_f32 bq_f32_boost;
 	arm_biquad_cascade_df1_init_f32 (
-									&bq_f32,		// biquad struct
-									1,				// num stages
-									coeffs_f32,		// ptr to coeffs (b0 b1 b2 a1 a2)
-									bq_f32_state	// 4*numstages element biquad state buffer
-									);
+		&bq_f32_boost,		// biquad struct
+		1,					// num stages
+		coeffs_f32_boost,	// ptr to coeffs (b0 b1 b2 a1 a2)
+		bq_f32_state_boost	// 4*numstages element biquad state buffer
+	);
+	arm_biquad_casd_df1_inst_f32 bq_f32_cut;
+	arm_biquad_cascade_df1_init_f32 (
+		&bq_f32_cut,		// biquad struct
+		1,					// num stages
+		coeffs_f32_cut,		// ptr to coeffs (b0 b1 b2 a1 a2)
+		bq_f32_state_cut	// 4*numstages element biquad state buffer
+	);
+	
 										
-	float buf_f32[I2SC_BUFFSZ];
+	float buf_f32_boost[I2SC_BUFFSZ];
+	float buf_f32_cut[I2SC_BUFFSZ];
 	float buf_add_f32[I2SC_BUFFSZ];
 	
-	int32_t *rx_buf, *tx_buf;
+	int32_t *rx_buf, *tx_buf_boost, *tx_buf_cut;
 	
 	float default_gain = pow(10.0, 0.88/20.0);
 	
@@ -184,63 +196,70 @@ int main(void)
 			
 			if (PingPong == PING) {
 				rx_buf = ReceiveBufR2;
-				tx_buf = TransmitBufR2;
+				tx_buf_boost = TransmitBufR2;
+				tx_buf_cut = TransmitBufL1;
 			}
 			else { /* == PONG */
 				rx_buf = ReceiveBufR1;
-				tx_buf = TransmitBufR1;
+				tx_buf_boost = TransmitBufR1;
+				tx_buf_cut = TransmitBufL2;
 			}
-
-			//printf("rx_buf[0] %li \r\n", rx_buf[0]);
 			
 			if (FILTER_ON){	
 				/* convert to float */
-				arm_q31_to_float(rx_buf, buf_f32, I2SC_BUFFSZ);
-				/* copy to addition buffer and apply default gain */
+				arm_q31_to_float(rx_buf, buf_f32_boost, I2SC_BUFFSZ);
+				/* copy to addition and cut buffers and apply default gain */
 				for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
-					buf_f32[i] = buf_add_f32[i] = buf_f32[i] * default_gain;
+					buf_f32_boost[i] = buf_f32_cut[i] = buf_add_f32[i] = buf_f32_boost[i] * default_gain;
 				}
 				/* apply bandpass */
-				arm_biquad_cascade_df1_f32(&bq_f32, buf_f32, buf_f32, I2SC_BUFFSZ);
+				arm_biquad_cascade_df1_f32(&bq_f32_boost, buf_f32_boost, buf_f32_boost, I2SC_BUFFSZ);
+				arm_biquad_cascade_df1_f32(&bq_f32_cut, buf_f32_cut, buf_f32_cut, I2SC_BUFFSZ);
 				/* sum with original gained signal */
 				for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
-					buf_f32[i] += buf_add_f32[i];
+					buf_f32_boost[i] += buf_add_f32[i];
+					buf_f32_cut[i] += buf_add_f32[i];
 				}
 				/* convert back to q31 */
-				arm_float_to_q31(buf_f32, tx_buf, I2SC_BUFFSZ);
+				arm_float_to_q31(buf_f32_boost, tx_buf_boost, I2SC_BUFFSZ);
+				arm_float_to_q31(buf_f32_cut, tx_buf_cut, I2SC_BUFFSZ);
 
 			}
 			else {	/* no dsp */		
 				for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
-					tx_buf[i] = rx_buf[i];
+					tx_buf_boost[i] = rx_buf[i];
+					tx_buf_cut[i] = rx_buf[i];
 				}
 			}
 			
 			newdata = 0;									
 		}	
 		
+		
+		
+		
 		/* calculate new coefficients when there's a new Vfreq */
 		if (new_freq) {
-			calc_set_coeffs(coeffs_f32, Vfreq, Vampl);
+			calc_set_coeffs(coeffs_f32_boost, coeffs_f32_cut, Vfreq, Vampl);
 			new_freq = 0;
 			printf("freq %g\r\n", Vfreq);
 		}
 		
 		/* calculate new coefficients when there's a new Vampl */
 		if (new_ampl) {
-			calc_set_coeffs(coeffs_f32, Vfreq, Vampl);
+			calc_set_coeffs(coeffs_f32_boost, coeffs_f32_cut, Vfreq, Vampl);
 			new_ampl = 0;
 			printf("gain db %g\r\n", 20 * log((Vampl / 2000.0f) + 1.0f) / log(10));
 		}
 		
 		if (new_q) {
-			calc_set_coeffs(coeffs_f32, Vfreq, Vampl);
+			calc_set_coeffs(coeffs_f32_boost, coeffs_f32_cut, Vfreq, Vampl);
 			new_q = 0;			
 			printf("Q %g\r\n", Q);
 		}
 		
 		if (new_direction){
-			calc_set_coeffs(coeffs_f32, Vfreq, Vampl);
+			calc_set_coeffs(coeffs_f32_boost, coeffs_f32_cut, Vfreq, Vampl);
 			new_direction = 0;
 			printf("%s\r\n", boost ? "BOOST" : "CUT");
 		}
@@ -337,14 +356,14 @@ void I2SC0_Handler(void) {
 	if (channelCount == CHANNEL_L && (I2SC0 -> I2SC_SR & I2SC_SR_ENDTX) ) {
 
 		if (PingPong == PING) {
-			I2SC0 -> I2SC_TNPR = (uint32_t)ReceiveBufL1; //transmit buffer 1
+			I2SC0 -> I2SC_TNPR = (uint32_t)TransmitBufL1; //transmit buffer 1
 			I2SC0 -> I2SC_TNCR = I2SC_BUFFSZ;
 			
 			I2SC0 -> I2SC_RNPR = (uint32_t)ReceiveBufL1; //receive to buffer 1
 			I2SC0 -> I2SC_RNCR = I2SC_BUFFSZ;
 
 		} else { // PONG
-			I2SC0 -> I2SC_TNPR = (uint32_t)ReceiveBufL2; //transmit buffer 2
+			I2SC0 -> I2SC_TNPR = (uint32_t)TransmitBufL2; //transmit buffer 2
 			I2SC0 -> I2SC_TNCR = I2SC_BUFFSZ;
 
 			I2SC0 -> I2SC_RNPR = (uint32_t)ReceiveBufL2; //receive to buffer 2
@@ -403,7 +422,7 @@ void FLEXCOM1_Handler(void){
 		
 		if (ubuf[5] == 'a'){ 
 			float Vampl_new = atoi(ubuf);
-			if (abs(Vampl_new - Vampl) > MIN_V_DEV) { /* more than 20 mV diff in adc reading*/
+			if (abs(Vampl_new - Vampl) > MIN_V_DEV) { /* significant diff in adc result*/
 				Vampl = Vampl_new;
 				new_ampl = 1;
 			}
@@ -411,7 +430,7 @@ void FLEXCOM1_Handler(void){
 		}
 		else if (ubuf[5] == 'f'){
 			float Vfreq_new = atoi(ubuf);
-			if (abs(Vfreq_new - Vfreq) > MIN_V_DEV) { /* more than 20 mV diff in adc reading*/
+			if (abs(Vfreq_new - Vfreq) > MIN_V_DEV) { /* significant diff in adc result*/
 				Vfreq = Vfreq_new;
 				new_freq = 1;
 			}
