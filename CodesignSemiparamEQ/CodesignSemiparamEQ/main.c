@@ -148,10 +148,12 @@ int main(void)
 	
 	int32_t *rx_buf, *tx_buf;
 	
-	float default_gain = pow(10.0, 0.9/20.0);
+	float default_gain = pow(10.0, 0.88/20.0);
 	
 	new_ampl = 1;
 	new_freq = 1;
+	new_q = 1;
+	new_direction = 1;
 	
 	while (1) {
 	
@@ -174,7 +176,7 @@ int main(void)
 				arm_q31_to_float(rx_buf, buf_f32, I2SC_BUFFSZ);
 				/* copy to addition buffer and apply default gain */
 				for (uint16_t i = 0; i < I2SC_BUFFSZ; i++){
-					buf_add_f32[i] = buf_f32[i] * default_gain;
+					buf_f32[i] = buf_add_f32[i] = buf_f32[i] * default_gain;
 				}
 				/* apply bandpass */
 				arm_biquad_cascade_df1_f32(&bq_f32, buf_f32, buf_f32, I2SC_BUFFSZ);
