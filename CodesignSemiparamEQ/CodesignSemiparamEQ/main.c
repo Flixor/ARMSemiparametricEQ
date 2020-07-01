@@ -78,9 +78,6 @@ static volatile uint8_t new_ampl;
 static volatile float Q = 2.0f;
 static volatile uint8_t new_q;
 
-static volatile uint8_t boost = 0;
-static volatile uint8_t new_direction;
-
 /* Debug */
 #define FILTER_ON 1
 
@@ -105,7 +102,7 @@ static void calc_set_coeffs(float *coeffs_boost, float *coeffs_cut, float V_freq
 	float wc = 2 * M_PI * V_freq / SR;
 	
 	/* should actually be alpha = sin(wc) / (Q * 2) here, 
-	 * but we do a magic Q adjustment...
+	 * but we do a magic Q and alpha adjustment...
 	 * I don't make the rules around here
 	 * Measurements say jump, I say how high */
 	float Q_drift = Q * (1 - wc / (M_PI * 4));
@@ -187,7 +184,6 @@ int main(void)
 	new_ampl = 1;
 	new_freq = 1;
 	new_q = 1;
-	new_direction = 1;
 	
 	while (1) {
 	
@@ -256,12 +252,6 @@ int main(void)
 			calc_set_coeffs(coeffs_f32_boost, coeffs_f32_cut, Vfreq, Vampl);
 			new_q = 0;			
 			printf("Q %g\r\n", Q);
-		}
-		
-		if (new_direction){
-			calc_set_coeffs(coeffs_f32_boost, coeffs_f32_cut, Vfreq, Vampl);
-			new_direction = 0;
-			printf("%s\r\n", boost ? "BOOST" : "CUT");
 		}
 		
 
@@ -422,6 +412,7 @@ void FLEXCOM1_Handler(void){
 		
 		if (ubuf[5] == 'a'){ 
 			float Vampl_new = atoi(ubuf);
+			if (Vampl_new > 6000.0f) Vampl_new = 6000.0f;
 			if (abs(Vampl_new - Vampl) > MIN_V_DEV) { /* significant diff in adc result*/
 				Vampl = Vampl_new;
 				new_ampl = 1;
@@ -430,6 +421,8 @@ void FLEXCOM1_Handler(void){
 		}
 		else if (ubuf[5] == 'f'){
 			float Vfreq_new = atoi(ubuf);
+			if (Vfreq_new < 250.0f) Vfreq_new = 250.0f;
+			if (Vfreq_new > 4000.0f) Vfreq_new = 4000.0f;
 			if (abs(Vfreq_new - Vfreq) > MIN_V_DEV) { /* significant diff in adc result*/
 				Vfreq = Vfreq_new;
 				new_freq = 1;
@@ -443,15 +436,6 @@ void FLEXCOM1_Handler(void){
 		}
 				
 		ubuf[5] = 0;
-	}
-	/* to flip boost and cut */
-	else if (c == 'c'){
-		boost = 0;
-		new_direction = 1;
-	}
-	else if (c == 'b'){
-		boost = 1;
-		new_direction = 1;
 	}
 		
 	USART1 -> US_CR |= US_CR_RSTSTA_Msk; // clears overrun error OVRE bit in receiver, which then clears RXRDY
