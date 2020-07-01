@@ -417,8 +417,7 @@ void FLEXCOM1_Handler(void){
 			if (abs(Vampl_new - Vampl) > MIN_V_DEV) { /* significant diff in adc result*/
 				Vampl = Vampl_new;
 				new_ampl = 1;
-			}
-					
+			}		
 		}
 		else if (ubuf[5] == 'f'){
 			float Vfreq_new = atoi(ubuf);
@@ -427,8 +426,7 @@ void FLEXCOM1_Handler(void){
 			if (abs(Vfreq_new - Vfreq) > MIN_V_DEV) { /* significant diff in adc result*/
 				Vfreq = Vfreq_new;
 				new_freq = 1;
-			}
-			
+			}	
 		}
 		else if (ubuf[5] == 'q'){
 			Q = atoi(ubuf);
