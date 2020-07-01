@@ -413,6 +413,7 @@ void FLEXCOM1_Handler(void){
 		if (ubuf[5] == 'a'){ 
 			float Vampl_new = atoi(ubuf);
 			if (Vampl_new > 6000.0f) Vampl_new = 6000.0f;
+			if (Vampl_new < 1.0f) Vampl_new = 1.0f;
 			if (abs(Vampl_new - Vampl) > MIN_V_DEV) { /* significant diff in adc result*/
 				Vampl = Vampl_new;
 				new_ampl = 1;
