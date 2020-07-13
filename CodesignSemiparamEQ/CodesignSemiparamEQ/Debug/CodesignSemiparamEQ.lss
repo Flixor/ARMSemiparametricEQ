@@ -1513,12 +1513,12 @@ int main(void)
   400bc2:	2101      	movs	r1, #1
   400bc4:	4c48      	ldr	r4, [pc, #288]	; (400ce8 <main+0x178>)
   400bc6:	47a0      	blx	r4
-	float buf_f32_cut[I2SC_BUFFSZ];
 	float buf_add_f32[I2SC_BUFFSZ];
 	
 	int32_t *rx_buf, *tx_buf_boost, *tx_buf_cut;
 	
-	float default_gain = pow(10.0, 0.88/20.0);
+	/* default offsets: 0.88 dB for codec, 0.21 for breadboard circuitry */
+	float default_gain = pow(10.0, 1.09/20.0);
   400bc8:	4b48      	ldr	r3, [pc, #288]	; (400cec <main+0x17c>)
   400bca:	f607 4264 	addw	r2, r7, #3172	; 0xc64
   400bce:	6013      	str	r3, [r2, #0]
@@ -1656,7 +1656,7 @@ int main(void)
   400ce0:	20000008 	.word	0x20000008
   400ce4:	004006b1 	.word	0x004006b1
   400ce8:	00404a25 	.word	0x00404a25
-  400cec:	3f8da5d9 	.word	0x3f8da5d9
+  400cec:	3f911d3e 	.word	0x3f911d3e
   400cf0:	200009f8 	.word	0x200009f8
   400cf4:	200009f7 	.word	0x200009f7
   400cf8:	200009f9 	.word	0x200009f9
@@ -2458,8 +2458,7 @@ void FLEXCOM1_Handler(void){
   40132a:	2201      	movs	r2, #1
   40132c:	701a      	strb	r2, [r3, #0]
   40132e:	e05f      	b.n	4013f0 <FLEXCOM1_Handler+0x1cc>
-			}
-					
+			}		
 		}
 		else if (ubuf[5] == 'f'){
   401330:	4b37      	ldr	r3, [pc, #220]	; (401410 <FLEXCOM1_Handler+0x1ec>)
@@ -2515,8 +2514,7 @@ void FLEXCOM1_Handler(void){
   4013b2:	2201      	movs	r2, #1
   4013b4:	701a      	strb	r2, [r3, #0]
   4013b6:	e01b      	b.n	4013f0 <FLEXCOM1_Handler+0x1cc>
-			}
-			
+			}	
 		}
 		else if (ubuf[5] == 'q'){
   4013b8:	4b15      	ldr	r3, [pc, #84]	; (401410 <FLEXCOM1_Handler+0x1ec>)

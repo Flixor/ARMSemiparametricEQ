@@ -179,7 +179,8 @@ int main(void)
 	
 	int32_t *rx_buf, *tx_buf_boost, *tx_buf_cut;
 	
-	float default_gain = pow(10.0, 0.88/20.0);
+	/* default offsets: 0.88 dB for codec, 0.21 for breadboard circuitry */
+	float default_gain = pow(10.0, 1.09/20.0);
 	
 	new_ampl = 1;
 	new_freq = 1;
