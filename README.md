@@ -1,11 +1,11 @@
-### Overview
+## Overview
 This is an implementation of a semiparametric EQ on SAMG55J19 Cortex-M4 ARM chip. The audio is received from an AK4558EN high fidelity audio chip via I2S. 
 
 The goal of this project was to make a digital implementation of a semiparametric EQ, which meets a certain set of specifications. The user interfaces with the EQ in an analog manner, with trim potentiometers. The EQ is semiparametric in the sense that the user can adjust gain and center frequency, but the Q factor is constant. 
 
 The 'codesign' naming comes from the overarching project this was a part of, which involved creating an analog and digital implementation of a device that meet the same specifications. The analog version was used to power the SAMG55 version, and also provided the user control: the trimpots are read by an XMega microcontroller, which in turn communicates with the SAMG55 via UART. The analog version will be uploaded soon to a separate repo. 
 
-### Specifications
+## Specifications
 The specs are the following:
 
 Specification | Value 
@@ -25,5 +25,5 @@ THD+N | 1% of signal strength, rms, 20 Hz - 22 kHz
 Input signal | Max 1 V peak (2 V peak-peak)
 Flatness | <0.5 dB at 0 dB gain
 
-### Hardware
+## Hardware
 The hardware design for the SAMG55 board and AK4558EN board are unfortunately not mine to share. If interested, shoot me a message!
