@@ -1,2 +1,6 @@
 
 CodesignSemiparamEQ/Debug/
+
+*.sublime-workspace
+
+*.sublime-project
